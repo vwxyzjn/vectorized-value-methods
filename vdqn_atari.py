@@ -24,55 +24,57 @@ from torch.utils.tensorboard import SummaryWriter
 def parse_args():
     # Common arguments
     # fmt: off
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exp-name', type=str, default=os.path.basename(__file__).rstrip(".py"),
-        help='the name of this experiment')
-    parser.add_argument('--gym-id', type=str, default="BreakoutNoFrameskip-v4",
-        help='the id of the gym environment')
-    parser.add_argument('--learning-rate', type=float, default=2.5e-4,
-        help='the learning rate of the optimizer')
-    parser.add_argument('--seed', type=int, default=2,
-        help='seed of the experiment')
-    parser.add_argument('--total-timesteps', type=int, default=10000000,
-        help='total timesteps of the experiments')
-    parser.add_argument('--torch-deterministic', type=lambda x:bool(strtobool(x)), default=True, nargs='?', const=True,
-        help='if toggled, `torch.backends.cudnn.deterministic=False`')
-    parser.add_argument('--cuda', type=lambda x:bool(strtobool(x)), default=True, nargs='?', const=True,
-        help='if toggled, cuda will be enabled by default')
-    parser.add_argument('--track', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
-        help='if toggled, this experiment will be tracked with Weights and Biases')
-    parser.add_argument('--wandb-project-name', type=str, default="cleanRL",
+    parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
+        help="the name of this experiment")
+    parser.add_argument("--gym-id", type=str, default="BreakoutNoFrameskip-v4",
+        help="the id of the gym environment")
+    parser.add_argument("--learning-rate", type=float, default=2.5e-4,
+        help="the learning rate of the optimizer")
+    parser.add_argument("--seed", type=int, default=2,
+        help="seed of the experiment")
+    parser.add_argument("--total-timesteps", type=int, default=10000000,
+        help="total timesteps of the experiments")
+    parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+        help="if toggled, `torch.backends.cudnn.deterministic=False`")
+    parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+        help="if toggled, cuda will be enabled by default")
+    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="if toggled, this experiment will be tracked with Weights and Biases")
+    parser.add_argument("--wandb-project-name", type=str, default="cleanRL",
         help="the wandb's project name")
-    parser.add_argument('--wandb-entity', type=str, default=None,
+    parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
-    parser.add_argument('--capture-video', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
-        help='weather to capture videos of the agent performances (check out `videos` folder)')
+    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="weather to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument('--num-envs', type=int, default=8,
-        help='the number of parallel game environments')
-    parser.add_argument('--num-steps', type=int, default=128,
-        help='the number of steps to run in each environment per policy rollout')
-    parser.add_argument('--num-minibatches', type=int, default=4,
-        help='the number of mini-batches')
-    parser.add_argument('--update-epochs', type=int, default=8,
+    parser.add_argument("--num-envs", type=int, default=8,
+        help="the number of parallel game environments")
+    parser.add_argument("--num-steps", type=int, default=128,
+        help="the number of steps to run in each environment per policy rollout")
+    parser.add_argument("--num-minibatches", type=int, default=4,
+        help="the number of mini-batches")
+    parser.add_argument("--update-epochs", type=int, default=8,
         help="the K epochs to update the policy")
-    parser.add_argument('--gamma', type=float, default=0.99,
-        help='the discount factor gamma')
-    parser.add_argument('--target-network-frequency', type=int, default=1000,
+    parser.add_argument("--gamma", type=float, default=0.99,
+        help="the discount factor gamma")
+    parser.add_argument("--target-network-frequency", type=int, default=1000,
         help="the timesteps it takes to update the target network")
-    parser.add_argument('--max-grad-norm', type=float, default=0.5,
-        help='the maximum norm for the gradient clipping')
-    parser.add_argument('--start-e', type=float, default=1.,
+    parser.add_argument("--max-grad-norm", type=float, default=0.5,
+        help="the maximum norm for the gradient clipping")
+    parser.add_argument("--start-e", type=float, default=1.0,
         help="the starting epsilon for exploration")
-    parser.add_argument('--end-e', type=float, default=0.05,
+    parser.add_argument("--end-e", type=float, default=0.05,
         help="the ending epsilon for exploration")
-    parser.add_argument('--exploration-fraction', type=float, default=0.1,
+    parser.add_argument("--exploration-fraction", type=float, default=0.1,
         help="the fraction of `total-timesteps` it takes from start-e to go end-e")
     args = parser.parse_args()
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     # fmt: on
+
     return args
 
 
@@ -148,8 +150,7 @@ if __name__ == "__main__":
         )
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
-        "hyperparameters",
-        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+        "hyperparameters", "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
     # TRY NOT TO MODIFY: seeding
@@ -189,7 +190,7 @@ if __name__ == "__main__":
 
     for update in range(1, num_updates + 1):
         # ROLLOUTS
-        epsilon = linear_schedule(args.start_e, args.end_e, args.exploration_fraction*args.total_timesteps, global_step)
+        epsilon = linear_schedule(args.start_e, args.end_e, args.exploration_fraction * args.total_timesteps, global_step,)
         writer.add_scalar("charts/epsilon", epsilon, global_step)
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
@@ -208,7 +209,10 @@ if __name__ == "__main__":
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, reward, done, info = envs.step(action.cpu().numpy())
             rewards[step] = torch.tensor(reward).to(device).view(-1)
-            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
+            next_obs, next_done = (
+                torch.Tensor(next_obs).to(device),
+                torch.Tensor(done).to(device),
+            )
 
             for item in info:
                 if "episode" in item.keys():
@@ -216,13 +220,13 @@ if __name__ == "__main__":
                     writer.add_scalar("charts/episodic_return", item["episode"]["r"], global_step)
                     writer.add_scalar("charts/episodic_length", item["episode"]["l"], global_step)
                     break
-        
+
         # TRAINING
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
         b_actions = actions.reshape((-1, 1)).long()
         b_rewards = rewards.reshape((-1,))
         b_dones = dones.reshape((-1,))
-        
+
         # next_obs index manipulation
         b_next_obs = torch.zeros_like(obs).to(device)
         b_next_obs[:-1] = obs[1:]
@@ -241,22 +245,22 @@ if __name__ == "__main__":
                     td_target = b_rewards[mb_inds] + args.gamma * target_max * (1 - b_dones[mb_inds])
                 old_val = q_network.forward(b_obs[mb_inds]).gather(1, b_actions[mb_inds]).squeeze()
                 loss = loss_fn(td_target, old_val)
-        
+
                 writer.add_scalar("losses/td_loss", loss, global_step)
-        
+
                 # optimize the midel
                 optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(list(q_network.parameters()), args.max_grad_norm)
                 optimizer.step()
-        
+
                 # update the target network
                 if num_gradient_updates % args.target_network_frequency == 0:
                     print("target_network")
                     target_network.load_state_dict(q_network.state_dict())
 
         writer.add_scalar("losses/q_values", old_val.mean().item(), global_step)
-    
+
     print(num_gradient_updates)
 
     envs.close()

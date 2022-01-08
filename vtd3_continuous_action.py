@@ -17,66 +17,66 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
+
 def parse_args():
     # Common arguments
     # fmt: off
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exp-name', type=str, default=os.path.basename(__file__).rstrip(".py"),
-        help='the name of this experiment')
-    parser.add_argument('--gym-id', type=str, default="HopperBulletEnv-v0",
-        help='the id of the gym environment')
-    parser.add_argument('--learning-rate', type=float, default=3e-4,
-        help='the learning rate of the optimizer')
-    parser.add_argument('--seed', type=int, default=1,
-        help='seed of the experiment')
-    parser.add_argument('--episode-length', type=int, default=0,
-        help='the maximum length of each episode')
-    parser.add_argument('--total-timesteps', type=int, default=1000000,
-        help='total timesteps of the experiments')
-    parser.add_argument('--torch-deterministic', type=lambda x:bool(strtobool(x)), default=True, nargs='?', const=True,
-        help='if toggled, `torch.backends.cudnn.deterministic=False`')
-    parser.add_argument('--cuda', type=lambda x:bool(strtobool(x)), default=True, nargs='?', const=True,
-        help='if toggled, cuda will not be enabled by default')
-    parser.add_argument('--track', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
-        help='run the script in production mode and use wandb to log outputs')
-    parser.add_argument('--capture-video', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
-        help='weather to capture videos of the agent performances (check out `videos` folder)')
-    parser.add_argument('--wandb-project-name', type=str, default="cleanRL",
+    parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
+        help="the name of this experiment")
+    parser.add_argument("--gym-id", type=str, default="HopperBulletEnv-v0",
+        help="the id of the gym environment")
+    parser.add_argument("--learning-rate", type=float, default=3e-4,
+        help="the learning rate of the optimizer")
+    parser.add_argument("--seed", type=int, default=1,
+        help="seed of the experiment")
+    parser.add_argument("--episode-length", type=int, default=0,
+        help="the maximum length of each episode")
+    parser.add_argument("--total-timesteps", type=int, default=1000000,
+        help="total timesteps of the experiments")
+    parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+        help="if toggled, `torch.backends.cudnn.deterministic=False`")
+    parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+        help="if toggled, cuda will not be enabled by default")
+    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="run the script in production mode and use wandb to log outputs")
+    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="weather to capture videos of the agent performances (check out `videos` folder)")
+    parser.add_argument("--wandb-project-name", type=str, default="cleanRL",
         help="the wandb's project name")
-    parser.add_argument('--wandb-entity', type=str, default=None,
+    parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
-    
+
     # Algorithm specific arguments
-    parser.add_argument('--num-envs', type=int, default=8,
-        help='the number of parallel game environments')
-    parser.add_argument('--num-steps', type=int, default=128,
-        help='the number of steps to run in each environment per policy rollout')
-    parser.add_argument('--num-minibatches', type=int, default=4,
-        help='the number of mini-batches')
-    parser.add_argument('--update-epochs', type=int, default=4,
+    parser.add_argument("--num-envs", type=int, default=8,
+        help="the number of parallel game environments")
+    parser.add_argument("--num-steps", type=int, default=128,
+        help="the number of steps to run in each environment per policy rollout")
+    parser.add_argument("--num-minibatches", type=int, default=4,
+        help="the number of mini-batches")
+    parser.add_argument("--update-epochs", type=int, default=4,
         help="the K epochs to update the policy")
-    parser.add_argument('--gamma', type=float, default=0.99,
-        help='the discount factor gamma')
-    parser.add_argument('--tau', type=float, default=0.005,
+    parser.add_argument("--gamma", type=float, default=0.99,
+        help="the discount factor gamma")
+    parser.add_argument("--tau", type=float, default=0.005,
         help="target smoothing coefficient (default: 0.005)")
-    parser.add_argument('--max-grad-norm', type=float, default=0.5,
-        help='the maximum norm for the gradient clipping')
-    parser.add_argument('--policy-noise', type=float, default=0.2,
-        help='the scale of policy noise')
-    parser.add_argument('--exploration-noise', type=float, default=0.2,
-        help='the scale of exploration noise')
-    parser.add_argument('--learning-starts', type=int, default=25e3,
+    parser.add_argument("--max-grad-norm", type=float, default=0.5,
+        help="the maximum norm for the gradient clipping")
+    parser.add_argument("--policy-noise", type=float, default=0.2,
+        help="the scale of policy noise")
+    parser.add_argument("--exploration-noise", type=float, default=0.2,
+        help="the scale of exploration noise")
+    parser.add_argument("--learning-starts", type=int, default=25e3,
         help="timestep to start learning")
-    parser.add_argument('--policy-frequency', type=int, default=2,
+    parser.add_argument("--policy-frequency", type=int, default=2,
         help="the frequency of training policy (delayed)")
-    parser.add_argument('--noise-clip', type=float, default=0.5,
-        help='noise clip parameter of the Target Policy Smoothing Regularization')
+    parser.add_argument("--noise-clip", type=float, default=0.5,
+        help="noise clip parameter of the Target Policy Smoothing Regularization")
     args = parser.parse_args()
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     # fmt: on
     return args
-
 
 
 def make_env(gym_id, seed, idx, capture_video, run_name):
@@ -93,17 +93,20 @@ def make_env(gym_id, seed, idx, capture_video, run_name):
 
     return thunk
 
+
 # ALGO LOGIC: initialize agent here:
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.orthogonal_(layer.weight, std)
     torch.nn.init.constant_(layer.bias, bias_const)
     return layer
 
+
 class QNetwork(nn.Module):
     def __init__(self, envs):
         super(QNetwork, self).__init__()
-        self.fc1 = layer_init(nn.Linear(
-            np.array(envs.single_observation_space.shape).prod()+np.prod(envs.single_action_space.shape), 256))
+        self.fc1 = layer_init(
+            nn.Linear(np.array(envs.single_observation_space.shape).prod() + np.prod(envs.single_action_space.shape), 256,)
+        )
         self.fc2 = layer_init(nn.Linear(256, 256))
         self.fc3 = layer_init(nn.Linear(256, 1))
 
@@ -113,6 +116,7 @@ class QNetwork(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
+
 
 class Actor(nn.Module):
     def __init__(self, envs):
@@ -126,9 +130,11 @@ class Actor(nn.Module):
         x = F.tanh(self.fc2(x))
         return torch.tanh(self.fc_mu(x))
 
+
 def linear_schedule(start_sigma: float, end_sigma: float, duration: int, t: int):
-    slope =  (end_sigma - start_sigma) / duration
+    slope = (end_sigma - start_sigma) / duration
     return max(slope * t + start_sigma, end_sigma)
+
 
 if __name__ == "__main__":
     args = parse_args()
@@ -147,8 +153,7 @@ if __name__ == "__main__":
         )
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
-        "hyperparameters",
-        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+        "hyperparameters", "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
     # TRY NOT TO MODIFY: seeding
@@ -164,7 +169,7 @@ if __name__ == "__main__":
         [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
-    
+
     # ALGO LOGIC: initialize agent here:
     max_action = float(envs.single_action_space.high[0])
     actor = Actor(envs).to(device)
@@ -179,7 +184,7 @@ if __name__ == "__main__":
     q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=args.learning_rate)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
     loss_fn = nn.MSELoss()
-    
+
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
     actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
@@ -200,27 +205,30 @@ if __name__ == "__main__":
             global_step += 1 * args.num_envs
             obs[step] = next_obs
             dones[step] = next_done
-        
+
             # ALGO LOGIC: action logic
             with torch.no_grad():
                 action = actor.forward(next_obs)
                 clipped_noise = (
-                        torch.randn_like(action) * args.exploration_noise
-                    ).clamp(-args.noise_clip, args.noise_clip).to(device)
-                action = (action+clipped_noise).clamp(-max_action, max_action)
-                '''
+                    (torch.randn_like(action) * args.exploration_noise).clamp(-args.noise_clip, args.noise_clip).to(device)
+                )
+                action = (action + clipped_noise).clamp(-max_action, max_action)
+                """
                 action = (
                     action +
                     torch.normal(0, 1.0 * args.exploration_noise, size=(envs.num_envs, envs.single_action_space.shape[0]), device=device)
                 ).clamp(-max_action, max_action)
-                '''
+                """
                 action = action
             actions[step] = action
 
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, reward, done, info = envs.step(action.cpu().numpy())
             rewards[step] = torch.tensor(reward).to(device).view(-1)
-            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
+            next_obs, next_done = (
+                torch.Tensor(next_obs).to(device),
+                torch.Tensor(done).to(device),
+            )
 
             for item in info:
                 if "episode" in item.keys():
@@ -228,13 +236,13 @@ if __name__ == "__main__":
                     writer.add_scalar("charts/episodic_return", item["episode"]["r"], global_step)
                     writer.add_scalar("charts/episodic_length", item["episode"]["l"], global_step)
                     break
-        
+
         # ALGO LOGIC: training.
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
         b_rewards = rewards.reshape((-1,))
         b_dones = dones.reshape((-1,))
-        
+
         # next_obs index manipulation
         b_next_obs = torch.zeros_like(obs).to(device)
         b_next_obs[:-1] = obs[1:]
@@ -250,12 +258,14 @@ if __name__ == "__main__":
 
                 with torch.no_grad():
                     clipped_noise = (
-                        torch.randn_like(b_actions[mb_inds]) * args.policy_noise
-                    ).clamp(-args.noise_clip, args.noise_clip).to(device)
-                    next_state_actions = (
-                        target_actor.forward(b_next_obs[mb_inds]) + clipped_noise
-                    ).clamp(-max_action, max_action)
-                
+                        (torch.randn_like(b_actions[mb_inds]) * args.policy_noise)
+                        .clamp(-args.noise_clip, args.noise_clip)
+                        .to(device)
+                    )
+                    next_state_actions = (target_actor.forward(b_next_obs[mb_inds]) + clipped_noise).clamp(
+                        -max_action, max_action
+                    )
+
                     qf1_next_target = qf1_target.forward(b_next_obs[mb_inds], next_state_actions)
                     qf2_next_target = qf2_target.forward(b_next_obs[mb_inds], next_state_actions)
                     min_qf_next_target = torch.min(qf1_next_target, qf2_next_target)
@@ -273,13 +283,13 @@ if __name__ == "__main__":
                 q_optimizer.zero_grad()
                 qf1_loss.backward()
                 qf2_loss.backward()
-                
-                #writer.add_scalar("debug/min_qf1", min(list(qf1.parameters())), global_step)
-                #writer.add_scalar("debug/max_qf1", max(list(qf1.parameters())), global_step)
-                #writer.add_scalar("debug/min_qf2", min(list(qf2.parameters())), global_step)
-                #writer.add_scalar("debug/max_qf2", max(list(qf2.parameters())), global_step)
-                
-                nn.utils.clip_grad_norm_(list(qf1.parameters())+list(qf2.parameters()), args.max_grad_norm)
+
+                # writer.add_scalar("debug/min_qf1", min(list(qf1.parameters())), global_step)
+                # writer.add_scalar("debug/max_qf1", max(list(qf1.parameters())), global_step)
+                # writer.add_scalar("debug/min_qf2", min(list(qf2.parameters())), global_step)
+                # writer.add_scalar("debug/max_qf2", max(list(qf2.parameters())), global_step)
+
+                nn.utils.clip_grad_norm_(list(qf1.parameters()) + list(qf2.parameters()), args.max_grad_norm)
                 q_optimizer.step()
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
                 writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
@@ -288,8 +298,8 @@ if __name__ == "__main__":
                     actor_loss = -qf1.forward(b_obs[mb_inds], actor.forward(b_obs[mb_inds])).mean()
                     actor_optimizer.zero_grad()
                     actor_loss.backward()
-                    #writer.add_scalar("debug/min_actor", min(list(actor.parameters())), global_step)
-                    #writer.add_scalar("debug/max_actor", max(list(actor.parameters())), global_step)
+                    # writer.add_scalar("debug/min_actor", min(list(actor.parameters())), global_step)
+                    # writer.add_scalar("debug/max_actor", max(list(actor.parameters())), global_step)
                     nn.utils.clip_grad_norm_(list(actor.parameters()), args.max_grad_norm)
                     actor_optimizer.step()
 
