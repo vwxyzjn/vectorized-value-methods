@@ -26,7 +26,6 @@ from torch.utils.tensorboard import SummaryWriter
 def parse_args():
     # Common arguments
     # fmt: off
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
         help="the name of this experiment")
@@ -34,7 +33,7 @@ def parse_args():
         help="the id of the gym environment")
     parser.add_argument("--learning-rate", type=float, default=1e-4,
         help="the learning rate of the optimizer")
-    parser.add_argument("--seed", type=int, default=2,
+    parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
     parser.add_argument("--total-timesteps", type=int, default=10000000,
         help="total timesteps of the experiments")
@@ -82,7 +81,6 @@ def parse_args():
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     # fmt: on
-
     return args
 
 
@@ -167,7 +165,8 @@ if __name__ == "__main__":
         )
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
-        "hyperparameters", "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+        "hyperparameters",
+        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
     # TRY NOT TO MODIFY: seeding
@@ -207,7 +206,12 @@ if __name__ == "__main__":
 
     for update in range(1, num_updates + 1):
         # ROLLOUTS
-        epsilon = linear_schedule(args.start_e, args.end_e, args.exploration_fraction * args.total_timesteps, global_step,)
+        epsilon = linear_schedule(
+            args.start_e,
+            args.end_e,
+            args.exploration_fraction * args.total_timesteps,
+            global_step,
+        )
         writer.add_scalar("charts/epsilon", epsilon, global_step)
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
@@ -245,7 +249,6 @@ if __name__ == "__main__":
         b_next_obs[-1] = next_obs
         b_next_obs = b_next_obs.reshape((-1,) + envs.single_observation_space.shape)
         b_inds = np.arange(args.batch_size)
-
         for epoch in range(args.update_epochs):
             np.random.shuffle(b_inds)
             for start in range(0, args.batch_size, args.minibatch_size):

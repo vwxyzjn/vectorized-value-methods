@@ -30,22 +30,20 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
-    parser.add_argument("--episode-length", type=int, default=0,
-        help="the maximum length of each episode")
     parser.add_argument("--total-timesteps", type=int, default=1000000,
         help="total timesteps of the experiments")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-        help="if toggled, cuda will not be enabled by default")
+        help="if toggled, cuda will be enabled by default")
     parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
-        help="run the script in production mode and use wandb to log outputs")
-    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
-        help="weather to capture videos of the agent performances (check out `videos` folder)")
+        help="if toggled, this experiment will be tracked with Weights and Biases")
     parser.add_argument("--wandb-project-name", type=str, default="cleanRL",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
+    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="weather to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
     parser.add_argument("--num-envs", type=int, default=8,
@@ -94,21 +92,15 @@ def make_env(gym_id, seed, idx, capture_video, run_name):
     return thunk
 
 
-# ALGO LOGIC: initialize agent here:
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
-    torch.nn.init.orthogonal_(layer.weight, std)
-    torch.nn.init.constant_(layer.bias, bias_const)
-    return layer
-
-
 class QNetwork(nn.Module):
     def __init__(self, envs):
         super(QNetwork, self).__init__()
-        self.fc1 = layer_init(
-            nn.Linear(np.array(envs.single_observation_space.shape).prod() + np.prod(envs.single_action_space.shape), 256,)
+        self.fc1 = nn.Linear(
+            np.array(envs.single_observation_space.shape).prod() + np.prod(envs.single_action_space.shape),
+            256,
         )
-        self.fc2 = layer_init(nn.Linear(256, 256))
-        self.fc3 = layer_init(nn.Linear(256, 1))
+        self.fc2 = nn.Linear(256, 256)
+        self.fc3 = nn.Linear(256, 1)
 
     def forward(self, x, a):
         x = torch.cat([x, a], 1)
@@ -121,19 +113,14 @@ class QNetwork(nn.Module):
 class Actor(nn.Module):
     def __init__(self, envs):
         super(Actor, self).__init__()
-        self.fc1 = layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 256))
-        self.fc2 = layer_init(nn.Linear(256, 256))
-        self.fc_mu = layer_init(nn.Linear(256, np.prod(envs.single_action_space.shape)))
+        self.fc1 = nn.Linear(np.array(envs.single_observation_space.shape).prod(), 256)
+        self.fc2 = nn.Linear(256, 256)
+        self.fc_mu = nn.Linear(256, np.prod(envs.single_action_space.shape))
 
     def forward(self, x):
-        x = F.tanh(self.fc1(x))
-        x = F.tanh(self.fc2(x))
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
         return torch.tanh(self.fc_mu(x))
-
-
-def linear_schedule(start_sigma: float, end_sigma: float, duration: int, t: int):
-    slope = (end_sigma - start_sigma) / duration
-    return max(slope * t + start_sigma, end_sigma)
 
 
 if __name__ == "__main__":
@@ -153,7 +140,8 @@ if __name__ == "__main__":
         )
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
-        "hyperparameters", "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+        "hyperparameters",
+        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
     # TRY NOT TO MODIFY: seeding
@@ -237,7 +225,7 @@ if __name__ == "__main__":
                     writer.add_scalar("charts/episodic_length", item["episode"]["l"], global_step)
                     break
 
-        # ALGO LOGIC: training.
+        # TRAINING
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
         b_rewards = rewards.reshape((-1,))
@@ -284,11 +272,6 @@ if __name__ == "__main__":
                 qf1_loss.backward()
                 qf2_loss.backward()
 
-                # writer.add_scalar("debug/min_qf1", min(list(qf1.parameters())), global_step)
-                # writer.add_scalar("debug/max_qf1", max(list(qf1.parameters())), global_step)
-                # writer.add_scalar("debug/min_qf2", min(list(qf2.parameters())), global_step)
-                # writer.add_scalar("debug/max_qf2", max(list(qf2.parameters())), global_step)
-
                 nn.utils.clip_grad_norm_(list(qf1.parameters()) + list(qf2.parameters()), args.max_grad_norm)
                 q_optimizer.step()
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
@@ -298,19 +281,16 @@ if __name__ == "__main__":
                     actor_loss = -qf1.forward(b_obs[mb_inds], actor.forward(b_obs[mb_inds])).mean()
                     actor_optimizer.zero_grad()
                     actor_loss.backward()
-                    # writer.add_scalar("debug/min_actor", min(list(actor.parameters())), global_step)
-                    # writer.add_scalar("debug/max_actor", max(list(actor.parameters())), global_step)
                     nn.utils.clip_grad_norm_(list(actor.parameters()), args.max_grad_norm)
                     actor_optimizer.step()
 
-                    # update the target network
+                    writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)  # update the target network
                     for param, target_param in zip(actor.parameters(), target_actor.parameters()):
                         target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
                     for param, target_param in zip(qf1.parameters(), qf1_target.parameters()):
                         target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
                     for param, target_param in zip(qf2.parameters(), qf2_target.parameters()):
                         target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
-                    writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
 
     envs.close()
     writer.close()

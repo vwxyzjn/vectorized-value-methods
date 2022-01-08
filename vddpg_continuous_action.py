@@ -6,6 +6,7 @@ import random
 import time
 from distutils.util import strtobool
 import gym
+import pybullet_envs
 
 import numpy as np
 import torch
@@ -25,7 +26,7 @@ def parse_args():
         help="the id of the gym environment")
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
-    parser.add_argument("--seed", type=int, default=2,
+    parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
     parser.add_argument("--total-timesteps", type=int, default=300000,
         help="total timesteps of the experiments")
@@ -67,7 +68,6 @@ def parse_args():
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     # fmt: on
-
     return args
 
 
@@ -86,17 +86,12 @@ def make_env(gym_id, seed, idx, capture_video, run_name):
     return thunk
 
 
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
-    torch.nn.init.orthogonal_(layer.weight, std)
-    torch.nn.init.constant_(layer.bias, bias_const)
-    return layer
-
-
 class QNetwork(nn.Module):
     def __init__(self, envs):
         super(QNetwork, self).__init__()
         self.fc1 = nn.Linear(
-            np.array(envs.single_observation_space.shape).prod() + np.prod(envs.single_action_space.shape), 256,
+            np.array(envs.single_observation_space.shape).prod() + np.prod(envs.single_action_space.shape),
+            256,
         )
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 1)
@@ -122,11 +117,6 @@ class Actor(nn.Module):
         return torch.tanh(self.fc_mu(x))
 
 
-def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
-    slope = (end_e - start_e) / duration
-    return max(slope * t + start_e, end_e)
-
-
 if __name__ == "__main__":
     args = parse_args()
     run_name = f"{args.gym_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
@@ -144,7 +134,8 @@ if __name__ == "__main__":
         )
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
-        "hyperparameters", "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+        "hyperparameters",
+        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
     # TRY NOT TO MODIFY: seeding
@@ -251,7 +242,7 @@ if __name__ == "__main__":
                 qf1_a_values = qf1.forward(b_obs[mb_inds], b_actions[mb_inds]).view(-1)
                 qf1_loss = loss_fn(qf1_a_values, next_q_value)
 
-                # optimize the midel
+                # optimize the model
                 q_optimizer.zero_grad()
                 qf1_loss.backward()
                 nn.utils.clip_grad_norm_(list(qf1.parameters()), args.max_grad_norm)
@@ -271,8 +262,6 @@ if __name__ == "__main__":
                         target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
                     for param, target_param in zip(qf1.parameters(), qf1_target.parameters()):
                         target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
-
-    print(num_gradient_updates)
 
     envs.close()
     writer.close()

@@ -24,7 +24,6 @@ from torch.utils.tensorboard import SummaryWriter
 def parse_args():
     # Common arguments
     # fmt: off
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
         help="the name of this experiment")
@@ -32,7 +31,7 @@ def parse_args():
         help="the id of the gym environment")
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
-    parser.add_argument("--seed", type=int, default=2,
+    parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
     parser.add_argument("--total-timesteps", type=int, default=10000000,
         help="total timesteps of the experiments")
@@ -74,7 +73,6 @@ def parse_args():
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     # fmt: on
-
     return args
 
 
@@ -100,12 +98,6 @@ def make_env(gym_id, seed, idx, capture_video, run_name):
         return env
 
     return thunk
-
-
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
-    torch.nn.init.orthogonal_(layer.weight, std)
-    torch.nn.init.constant_(layer.bias, bias_const)
-    return layer
 
 
 class QNetwork(nn.Module):
@@ -150,7 +142,8 @@ if __name__ == "__main__":
         )
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
-        "hyperparameters", "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+        "hyperparameters",
+        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
     # TRY NOT TO MODIFY: seeding
@@ -190,7 +183,12 @@ if __name__ == "__main__":
 
     for update in range(1, num_updates + 1):
         # ROLLOUTS
-        epsilon = linear_schedule(args.start_e, args.end_e, args.exploration_fraction * args.total_timesteps, global_step,)
+        epsilon = linear_schedule(
+            args.start_e,
+            args.end_e,
+            args.exploration_fraction * args.total_timesteps,
+            global_step,
+        )
         writer.add_scalar("charts/epsilon", epsilon, global_step)
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
@@ -248,7 +246,7 @@ if __name__ == "__main__":
 
                 writer.add_scalar("losses/td_loss", loss, global_step)
 
-                # optimize the midel
+                # optimize the model
                 optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(list(q_network.parameters()), args.max_grad_norm)
@@ -256,12 +254,9 @@ if __name__ == "__main__":
 
                 # update the target network
                 if num_gradient_updates % args.target_network_frequency == 0:
-                    print("target_network")
                     target_network.load_state_dict(q_network.state_dict())
 
         writer.add_scalar("losses/q_values", old_val.mean().item(), global_step)
-
-    print(num_gradient_updates)
 
     envs.close()
     writer.close()

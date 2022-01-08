@@ -24,7 +24,7 @@ def parse_args():
         help="the id of the gym environment")
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
-    parser.add_argument("--seed", type=int, default=2,
+    parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
     parser.add_argument("--total-timesteps", type=int, default=300000,
         help="total timesteps of the experiments")
@@ -127,7 +127,8 @@ if __name__ == "__main__":
         )
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
-        "hyperparameters", "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+        "hyperparameters",
+        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
     # TRY NOT TO MODIFY: seeding
@@ -167,7 +168,12 @@ if __name__ == "__main__":
 
     for update in range(1, num_updates + 1):
         # ROLLOUTS
-        epsilon = linear_schedule(args.start_e, args.end_e, args.exploration_fraction * args.total_timesteps, global_step,)
+        epsilon = linear_schedule(
+            args.start_e,
+            args.end_e,
+            args.exploration_fraction * args.total_timesteps,
+            global_step,
+        )
         writer.add_scalar("charts/epsilon", epsilon, global_step)
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
@@ -225,7 +231,7 @@ if __name__ == "__main__":
 
                 writer.add_scalar("losses/td_loss", loss, global_step)
 
-                # optimize the midel
+                # optimize the model
                 optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(list(q_network.parameters()), args.max_grad_norm)
