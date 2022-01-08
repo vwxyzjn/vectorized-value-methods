@@ -5,20 +5,21 @@ import os
 import random
 import time
 from distutils.util import strtobool
-import gym
 
+import gym
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from stable_baselines3.common.atari_wrappers import (
+from torch.utils.tensorboard import SummaryWriter
+
+from stable_baselines3.common.atari_wrappers import (  # isort:skip
     ClipRewardEnv,
     EpisodicLifeEnv,
     FireResetEnv,
     MaxAndSkipEnv,
     NoopResetEnv,
 )
-from torch.utils.tensorboard import SummaryWriter
 
 
 def parse_args():
