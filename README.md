@@ -1,6 +1,6 @@
 # Vectorized Architecture for Value-based Methods
 
-This repository contains some early experiments combining vectorized environments and value based methods. See [this Google Doc](https://docs.google.com/document/d/1hdRAXtqNunmcyvULkCnDOg56UfnOFYq2KqX9lSRVfyM/edit?usp=sharing)
+This repository contains some early experiments combining vectorized environments and value-based methods. See [this Google Doc](https://docs.google.com/document/d/1hdRAXtqNunmcyvULkCnDOg56UfnOFYq2KqX9lSRVfyM/edit?usp=sharing)
 
 
 ## Get started
