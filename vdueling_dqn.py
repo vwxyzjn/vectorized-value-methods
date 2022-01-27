@@ -105,9 +105,9 @@ class QNetwork(nn.Module):
         self.advantage = nn.Linear(64, envs.single_action_space.n)
 
     def forward(self, x):
-        features = self.network(x)
-        value = self.value(features)
-        advantage = self.advantage(features)
+        hidden = self.network(x)
+        value = self.value(hidden)
+        advantage = self.advantage(hidden)
         avg_advantage = torch.mean(advantage, dim=1, keepdim=True)
         return value + advantage - avg_advantage
 
