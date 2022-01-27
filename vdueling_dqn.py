@@ -1,4 +1,4 @@
-# Reference: https://www.cs.toronto.edu/~vmnih/docs/dqn.pdf
+# Reference: https://arxiv.org/pdf/1511.06581.pdf
 
 import argparse
 import os
