@@ -127,9 +127,9 @@ class QNetwork(nn.Module):
         )
 
     def forward(self, x):
-        features = self.network(x / 255.0)
-        value = self.value(features)
-        advantage = self.advantage(features)
+        hidden = self.network(x / 255.0)
+        value = self.value(hidden)
+        advantage = self.advantage(hidden)
         avg_advantage = torch.mean(advantage, dim=1, keepdim=True)
         return value + advantage - avg_advantage
 
