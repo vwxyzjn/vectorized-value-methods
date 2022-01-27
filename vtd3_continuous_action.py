@@ -134,12 +134,12 @@ if __name__ == "__main__":
         wandb.init(
             project=args.wandb_project_name,
             entity=args.wandb_entity,
-            sync_tensorboard=True,
             config=vars(args),
             name=run_name,
             monitor_gym=True,
             save_code=True,
         )
+        wandb.tensorboard.patch(save=False)
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
         "hyperparameters",
