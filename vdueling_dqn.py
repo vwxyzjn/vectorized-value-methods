@@ -122,7 +122,7 @@ if __name__ == "__main__":
     run_name = f"{args.gym_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
         import wandb
-        
+
         wandb.init(
             project=args.wandb_project_name,
             entity=args.wandb_entity,
