@@ -113,7 +113,7 @@ class QNetwork(nn.Module):
             nn.ReLU(),
             nn.Conv2d(64, 64, 3, stride=1),
             nn.ReLU(),
-            nn.Flatten()
+            nn.Flatten(),
         )
         self.advantage = nn.Sequential(
             nn.Linear(3136, 512),
@@ -154,7 +154,7 @@ if __name__ == "__main__":
             save_code=True,
         )
         wandb.tensorboard.patch(save=False)
-        
+
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
         "hyperparameters",
