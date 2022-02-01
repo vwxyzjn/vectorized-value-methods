@@ -251,9 +251,9 @@ if __name__ == "__main__":
                     break
 
         max_timestep = int(timesteps.max().long())
-        hist = timesteps.histc(bins=max_timestep, min=0, max=max_timestep)
+        histogram = timesteps.histc(bins=max_timestep, min=0, max=max_timestep)
         x = range(max_timestep)
-        plt.bar(x, hist)
+        plt.bar(x, histogram)
         camera.snap()
         # TRAINING
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
@@ -326,6 +326,8 @@ if __name__ == "__main__":
 
     animation = camera.animate()
     animation.save(f"runs/{run_name}/animation.mp4")
+    if args.track:
+        wandb.log({"video.0": wandb.Video(f"runs/{run_name}/animation.mp4")})
 
     envs.close()
     writer.close()
