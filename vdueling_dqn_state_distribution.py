@@ -1,6 +1,4 @@
-# Reference: https://arxiv.org/pdf/1509.02971.pdf
-# https://github.com/seungeunrho/minimalRL/blob/master/ddpg.py
-# https://github.com/openai/spinningup/blob/master/spinup/algos/pytorch/ddpg/ddpg.py
+# Reference: https://arxiv.org/pdf/1511.06581.pdf
 
 import argparse
 import os
@@ -11,10 +9,8 @@ from distutils.util import strtobool
 import gym
 import matplotlib.pyplot as plt
 import numpy as np
-import pybullet_envs  # noqa
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 from celluloid import Camera
 from torch.utils.tensorboard import SummaryWriter
@@ -26,13 +22,13 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
         help="the name of this experiment")
-    parser.add_argument("--gym-id", type=str, default="HopperBulletEnv-v0",
+    parser.add_argument("--gym-id", type=str, default="CartPole-v1",
         help="the id of the gym environment")
-    parser.add_argument("--learning-rate", type=float, default=3e-4,
+    parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
-    parser.add_argument("--total-timesteps", type=int, default=1000000,
+    parser.add_argument("--total-timesteps", type=int, default=50000,
         help="total timesteps of the experiments")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
@@ -54,26 +50,22 @@ def parse_args():
         help="the number of parallel game environments")
     parser.add_argument("--num-steps", type=int, default=128,
         help="the number of steps to run in each environment per policy rollout")
-    parser.add_argument("--num-minibatches", type=int, default=4,
+    parser.add_argument("--num-minibatches", type=int, default=27,
         help="the number of mini-batches")
-    parser.add_argument("--update-epochs", type=int, default=4,
+    parser.add_argument("--update-epochs", type=int, default=30,
         help="the K epochs to update the policy")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
-    parser.add_argument("--tau", type=float, default=0.005,
-        help="target smoothing coefficient (default: 0.005)")
+    parser.add_argument("--target-network-frequency", type=int, default=1000,
+        help="the timesteps it takes to update the target network")
     parser.add_argument("--max-grad-norm", type=float, default=0.5,
         help="the maximum norm for the gradient clipping")
-    parser.add_argument("--policy-noise", type=float, default=0.2,
-        help="the scale of policy noise")
-    parser.add_argument("--exploration-noise", type=float, default=0.2,
-        help="the scale of exploration noise")
-    parser.add_argument("--learning-starts", type=int, default=25000,
-        help="timestep to start learning")
-    parser.add_argument("--policy-frequency", type=int, default=2,
-        help="the frequency of training policy (delayed)")
-    parser.add_argument("--noise-clip", type=float, default=0.5,
-        help="noise clip parameter of the Target Policy Smoothing Regularization")
+    parser.add_argument("--start-e", type=float, default=1.0,
+        help="the starting epsilon for exploration")
+    parser.add_argument("--end-e", type=float, default=0.05,
+        help="the ending epsilon for exploration")
+    parser.add_argument("--exploration-fraction", type=float, default=0.5,
+        help="the fraction of `total-timesteps` it takes from start-e to go end-e")
     args = parser.parse_args()
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
@@ -104,10 +96,6 @@ def make_env(gym_id, seed, idx, capture_video, run_name):
         if capture_video:
             if idx == 0:
                 env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-        env = gym.wrappers.NormalizeObservation(env)
-        env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
-        env = gym.wrappers.NormalizeReward(env)
-        env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
@@ -116,35 +104,35 @@ def make_env(gym_id, seed, idx, capture_video, run_name):
     return thunk
 
 
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
+    torch.nn.init.orthogonal_(layer.weight, std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+    return layer
+
+
 class QNetwork(nn.Module):
     def __init__(self, envs):
         super(QNetwork, self).__init__()
-        self.fc1 = nn.Linear(
-            np.array(envs.single_observation_space.shape).prod() + np.prod(envs.single_action_space.shape),
-            256,
+        self.network = nn.Sequential(
+            layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
+            nn.ReLU(),
+            layer_init(nn.Linear(64, 64)),
+            nn.ReLU(),
         )
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, 1)
-
-    def forward(self, x, a):
-        x = torch.cat([x, a], 1)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
-
-
-class Actor(nn.Module):
-    def __init__(self, envs):
-        super(Actor, self).__init__()
-        self.fc1 = nn.Linear(np.array(envs.single_observation_space.shape).prod(), 256)
-        self.fc2 = nn.Linear(256, 256)
-        self.fc_mu = nn.Linear(256, np.prod(envs.single_action_space.shape))
+        self.value = nn.Linear(64, 1)
+        self.advantage = nn.Linear(64, envs.single_action_space.n)
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return torch.tanh(self.fc_mu(x))
+        hidden = self.network(x)
+        value = self.value(hidden)
+        advantage = self.advantage(hidden)
+        avg_advantage = torch.mean(advantage, dim=1, keepdim=True)
+        return value + advantage - avg_advantage
+
+
+def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
+    slope = (end_e - start_e) / duration
+    return max(slope * t + start_e, end_e)
 
 
 if __name__ == "__main__":
@@ -162,6 +150,7 @@ if __name__ == "__main__":
             save_code=True,
         )
         wandb.tensorboard.patch(save=False)
+
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
         "hyperparameters",
@@ -179,21 +168,13 @@ if __name__ == "__main__":
     # env setup
     VecEnv = gym.vector.AsyncVectorEnv if args.asyncvec else gym.vector.SyncVectorEnv
     envs = VecEnv([make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name) for i in range(args.num_envs)])
-    assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
+    assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     # ALGO LOGIC: initialize agent here:
-    max_action = float(envs.single_action_space.high[0])
-    actor = Actor(envs).to(device)
-    qf1 = QNetwork(envs).to(device)
-    qf2 = QNetwork(envs).to(device)
-    qf1_target = QNetwork(envs).to(device)
-    qf2_target = QNetwork(envs).to(device)
-    target_actor = Actor(envs).to(device)
-    target_actor.load_state_dict(actor.state_dict())
-    qf1_target.load_state_dict(qf1.state_dict())
-    qf2_target.load_state_dict(qf2.state_dict())
-    q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=args.learning_rate)
-    actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
+    q_network = QNetwork(envs).to(device)
+    target_network = QNetwork(envs).to(device)
+    target_network.load_state_dict(q_network.state_dict())
+    optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
     loss_fn = nn.MSELoss()
 
     # ALGO Logic: Storage setup
@@ -210,34 +191,31 @@ if __name__ == "__main__":
     next_done = torch.zeros(args.num_envs).to(device)
     num_updates = args.total_timesteps // args.batch_size
     num_gradient_updates = 0
-
     # Visualization:
     fig, ax = plt.subplots()
     camera = Camera(fig)
 
     for update in range(1, num_updates + 1):
         # ROLLOUTS
+        epsilon = linear_schedule(
+            args.start_e,
+            args.end_e,
+            args.exploration_fraction * args.total_timesteps,
+            global_step,
+        )
+        writer.add_scalar("charts/epsilon", epsilon, global_step)
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
             obs[step] = next_obs
             dones[step] = next_done
 
             # ALGO LOGIC: action logic
-            if global_step < args.learning_starts:
-                action = torch.Tensor(envs.action_space.sample()).to(device)
             with torch.no_grad():
-                action = actor.forward(next_obs)
-                clipped_noise = (
-                    (torch.randn_like(action) * args.exploration_noise).clamp(-args.noise_clip, args.noise_clip).to(device)
-                )
-                action = (action + clipped_noise).clamp(-max_action, max_action)
-                """
-                action = (
-                    action +
-                    torch.normal(0, 1.0 * args.exploration_noise, size=(envs.num_envs, envs.single_action_space.shape[0]), device=device)
-                ).clamp(-max_action, max_action)
-                """
-                action = action
+                logits = q_network.forward(next_obs)
+                action = torch.argmax(logits, dim=1)
+                random_action = torch.randint(0, envs.single_action_space.n, (envs.num_envs,), device=device)
+                random_action_flag = torch.rand(envs.num_envs, device=device) > epsilon
+                action = torch.where(random_action_flag, action, random_action)
             actions[step] = action
 
             # TRY NOT TO MODIFY: execute the game and log data.
@@ -264,9 +242,10 @@ if __name__ == "__main__":
         ax.set_ylabel("Number of occurrences")
         ax.text(0.2, 1.01, f"global_step={global_step}, update={update}", transform=ax.transAxes)
         camera.snap()
+
         # TRAINING
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
-        b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
+        b_actions = actions.reshape((-1, 1)).long()
         b_rewards = rewards.reshape((-1,))
         b_dones = dones.reshape((-1,))
 
@@ -284,52 +263,24 @@ if __name__ == "__main__":
                 mb_inds = b_inds[start:end]
 
                 with torch.no_grad():
-                    clipped_noise = (
-                        (torch.randn_like(b_actions[mb_inds]) * args.policy_noise)
-                        .clamp(-args.noise_clip, args.noise_clip)
-                        .to(device)
-                    )
-                    next_state_actions = (target_actor.forward(b_next_obs[mb_inds]) + clipped_noise).clamp(
-                        -max_action, max_action
-                    )
+                    target_max, _ = target_network.forward(b_next_obs[mb_inds]).max(dim=1)
+                    td_target = b_rewards[mb_inds] + args.gamma * target_max * (1 - b_dones[mb_inds])
+                old_val = q_network.forward(b_obs[mb_inds]).gather(1, b_actions[mb_inds]).squeeze()
+                loss = loss_fn(td_target, old_val)
 
-                    qf1_next_target = qf1_target.forward(b_next_obs[mb_inds], next_state_actions)
-                    qf2_next_target = qf2_target.forward(b_next_obs[mb_inds], next_state_actions)
-                    min_qf_next_target = torch.min(qf1_next_target, qf2_next_target)
-                    next_q_value = b_rewards[mb_inds] + (1 - b_dones[mb_inds]) * args.gamma * (min_qf_next_target).view(-1)
-
-                qf1_a_values = qf1.forward(b_obs[mb_inds], b_actions[mb_inds]).view(-1)
-                qf2_a_values = qf2.forward(b_obs[mb_inds], b_actions[mb_inds]).view(-1)
-                qf1_loss = loss_fn(qf1_a_values, next_q_value)
-                qf2_loss = loss_fn(qf2_a_values, next_q_value)
-
-                writer.add_scalar("debug/q1_values", qf1_a_values.mean().item(), global_step)
-                writer.add_scalar("debug/q2_values", qf2_a_values.mean().item(), global_step)
+                writer.add_scalar("losses/td_loss", loss, global_step)
 
                 # optimize the model
-                q_optimizer.zero_grad()
-                qf1_loss.backward()
-                qf2_loss.backward()
+                optimizer.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_norm_(list(q_network.parameters()), args.max_grad_norm)
+                optimizer.step()
 
-                nn.utils.clip_grad_norm_(list(qf1.parameters()) + list(qf2.parameters()), args.max_grad_norm)
-                q_optimizer.step()
-                writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
-                writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
+                # update the target network
+                if num_gradient_updates % args.target_network_frequency == 0:
+                    target_network.load_state_dict(q_network.state_dict())
 
-                if num_gradient_updates % args.policy_frequency == 0:
-                    actor_loss = -qf1.forward(b_obs[mb_inds], actor.forward(b_obs[mb_inds])).mean()
-                    actor_optimizer.zero_grad()
-                    actor_loss.backward()
-                    nn.utils.clip_grad_norm_(list(actor.parameters()), args.max_grad_norm)
-                    actor_optimizer.step()
-
-                    writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)  # update the target network
-                    for param, target_param in zip(actor.parameters(), target_actor.parameters()):
-                        target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
-                    for param, target_param in zip(qf1.parameters(), qf1_target.parameters()):
-                        target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
-                    for param, target_param in zip(qf2.parameters(), qf2_target.parameters()):
-                        target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
+        writer.add_scalar("losses/q_values", old_val.mean().item(), global_step)
         print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
