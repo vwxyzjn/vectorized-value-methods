@@ -260,11 +260,6 @@ if __name__ == "__main__":
         b_dones = dones.reshape((-1,))
         b_returns = returns.reshape(-1)
 
-        # next_obs index manipulation
-        b_next_obs = torch.zeros_like(obs).to(device)
-        b_next_obs[:-1] = obs[1:]
-        b_next_obs[-1] = next_obs
-        b_next_obs = b_next_obs.reshape((-1,) + envs.single_observation_space.shape)
         b_inds = np.arange(args.batch_size)
         for epoch in range(args.update_epochs):
             np.random.shuffle(b_inds)
@@ -273,9 +268,6 @@ if __name__ == "__main__":
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
 
-                # with torch.no_grad():
-                #     target_max, _ = target_network.forward(b_next_obs[mb_inds]).max(dim=1)
-                #     td_target = b_rewards[mb_inds] + args.gamma * target_max * (1 - b_dones[mb_inds])
                 old_val = q_network.forward(b_obs[mb_inds]).gather(1, b_actions[mb_inds]).squeeze()
                 loss = loss_fn(b_returns[mb_inds], old_val)
 
