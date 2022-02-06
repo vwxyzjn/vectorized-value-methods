@@ -260,7 +260,6 @@ if __name__ == "__main__":
         b_dones = dones.reshape((-1,))
         b_returns = returns.reshape(-1)
 
-
         # next_obs index manipulation
         b_next_obs = torch.zeros_like(obs).to(device)
         b_next_obs[:-1] = obs[1:]
