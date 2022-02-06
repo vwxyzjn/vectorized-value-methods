@@ -78,6 +78,7 @@ def parse_args():
     # fmt: on
     return args
 
+
 def make_env(gym_id, seed, idx, capture_video, run_name):
     def thunk():
         env = gym.make(gym_id)
@@ -92,11 +93,11 @@ def make_env(gym_id, seed, idx, capture_video, run_name):
 
     return thunk
 
+
 class SoftQNetwork(nn.Module):
     def __init__(self, env):
         super(SoftQNetwork, self).__init__()
-        self.fc1 = nn.Linear(
-            np.array(env.single_observation_space.shape).prod()+np.prod(env.single_action_space.shape), 256)
+        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod() + np.prod(env.single_action_space.shape), 256)
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 1)
 
@@ -107,8 +108,10 @@ class SoftQNetwork(nn.Module):
         x = self.fc3(x)
         return x
 
+
 LOG_STD_MAX = 2
 LOG_STD_MIN = -5
+
 
 class Actor(nn.Module):
     def __init__(self, env):
@@ -119,9 +122,11 @@ class Actor(nn.Module):
         self.fc_logstd = nn.Linear(256, np.prod(env.single_action_space.shape))
         # action rescaling
         self.action_scale = torch.FloatTensor(
-            np.array([envs.single_action_space.high[0] - envs.single_action_space.low[0]]) / 2.)
+            np.array([envs.single_action_space.high[0] - envs.single_action_space.low[0]]) / 2.0
+        )
         self.action_bias = torch.FloatTensor(
-            np.array([envs.single_action_space.high[0] + envs.single_action_space.low[0]]) / 2.)
+            np.array([envs.single_action_space.high[0] + envs.single_action_space.low[0]]) / 2.0
+        )
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
@@ -129,7 +134,7 @@ class Actor(nn.Module):
         mean = self.fc_mean(x)
         log_std = self.fc_logstd(x)
         log_std = torch.tanh(log_std)
-        log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1) 
+        log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)
 
         return mean, log_std
 
@@ -142,7 +147,7 @@ class Actor(nn.Module):
         action = y_t * self.action_scale + self.action_bias
         log_prob = normal.log_prob(x_t)
         # Enforcing Action Bound
-        log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) +  1e-6)
+        log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + 1e-6)
         log_prob = log_prob.sum(1, keepdim=True)
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
         return action, log_prob, mean
@@ -200,8 +205,7 @@ if __name__ == "__main__":
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
 
     if args.autotune:
-        target_entropy = - torch.prod(torch.Tensor(
-            envs.single_action_space.shape).to(device)).item()
+        target_entropy = -torch.prod(torch.Tensor(envs.single_action_space.shape).to(device)).item()
         log_alpha = torch.zeros(1, requires_grad=True, device=device)
         alpha = log_alpha.exp().item()
         a_optimizer = optim.Adam([log_alpha], lr=args.q_lr)
@@ -270,12 +274,10 @@ if __name__ == "__main__":
                 mb_inds = b_inds[start:end]
 
                 with torch.no_grad():
-                    next_state_actions, next_state_log_pi, _ = \
-                        actor.get_action(b_next_obs[mb_inds])
+                    next_state_actions, next_state_log_pi, _ = actor.get_action(b_next_obs[mb_inds])
                     qf1_next_target = qf1_target(b_next_obs[mb_inds], next_state_actions)
                     qf2_next_target = qf2_target(b_next_obs[mb_inds], next_state_actions)
-                    min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - \
-                        alpha * next_state_log_pi
+                    min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - alpha * next_state_log_pi
                     next_q_value = b_rewards[mb_inds] + (1 - b_dones[mb_inds]) * args.gamma * (min_qf_next_target).view(-1)
 
                 qf1_a_values = qf1(b_obs[mb_inds], b_actions[mb_inds]).view(-1)
@@ -284,14 +286,13 @@ if __name__ == "__main__":
                 qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
                 qf_loss = (qf1_loss + qf2_loss) / 2
 
-
                 writer.add_scalar("debug/q1_values", qf1_a_values.mean().item(), global_step)
                 writer.add_scalar("debug/q2_values", qf2_a_values.mean().item(), global_step)
 
                 # optimize the model
                 q_optimizer.zero_grad()
                 qf_loss.backward()
-                nn.utils.clip_grad_norm_(list(qf1.parameters())+list(qf2.parameters()), args.max_grad_norm)
+                nn.utils.clip_grad_norm_(list(qf1.parameters()) + list(qf2.parameters()), args.max_grad_norm)
                 q_optimizer.step()
 
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
@@ -313,15 +314,15 @@ if __name__ == "__main__":
                         if args.autotune:
                             with torch.no_grad():
                                 _, log_pi, _ = actor.get_action(b_obs[mb_inds])
-                            alpha_loss = ( -log_alpha * (log_pi + target_entropy)).mean()
+                            alpha_loss = (-log_alpha * (log_pi + target_entropy)).mean()
 
                             a_optimizer.zero_grad()
                             alpha_loss.backward()
                             a_optimizer.step()
                             alpha = log_alpha.exp().item()
 
-                        writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)  
-            
+                        writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
+
             # update the target networks
             if global_step % args.target_network_frequency == 0:
                 for param, target_param in zip(qf1.parameters(), qf1_target.parameters()):
