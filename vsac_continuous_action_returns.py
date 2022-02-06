@@ -278,7 +278,6 @@ if __name__ == "__main__":
                     writer.add_scalar("charts/episodic_length", item["episode"]["l"], global_step)
                     break
 
-
         # bootstrap value if not done
         with torch.no_grad():
             next_value = qf1.forward(next_obs, actor.forward(next_obs)[0]).flatten()
@@ -315,7 +314,6 @@ if __name__ == "__main__":
                 num_gradient_updates += 1
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
-
 
                 qf1_a_values = qf1(b_obs[mb_inds], b_actions[mb_inds]).view(-1)
                 qf2_a_values = qf2(b_obs[mb_inds], b_actions[mb_inds]).view(-1)
