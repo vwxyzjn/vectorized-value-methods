@@ -38,3 +38,46 @@ We use [Pre-commit](https://pre-commit.com/) for code formatting, sorting inputs
 ```bash
 pre-commit run --all-files
 ```
+
+## How to run hyper-parameter sweeps
+
+Create a `sweep.yaml` file like the following
+
+```yaml
+command:
+- ${env}
+- ${interpreter}
+- ${program}
+- --track
+- ${args}
+method: bayes
+metric:
+  goal: maximize
+  name: charts/episodic_return
+parameters:
+  num-minibatches:
+    values:
+    - 1
+    - 2
+    - 3
+    - 4
+  update-epochs:
+    values:
+    - 1
+    - 2
+    - 3
+    - 4
+  q-lr:
+    values:
+    - 0.001
+    - 0.0003
+    - 0.0001
+program: vsac_continuous_action_returns.py
+```
+
+Then run 
+
+```bash
+wandb sweep -p vectorized-value-methods -e vwxyzjn sweep.yaml
+```
+
