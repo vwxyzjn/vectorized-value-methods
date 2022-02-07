@@ -79,5 +79,14 @@ Then run
 
 ```bash
 wandb sweep -p vectorized-value-methods -e vwxyzjn sweep.yaml
+# Here `-p` stands for `wandb-project-name` and `-e` the `wandb-entity`.
 ```
+
+This command in turn will Initialize a sweep with an id like `o9bwxmbv` and follow the printed instruction from the command above to run something like 
+
+```bash
+wandb agent vwxyzjn/vectorized-value-methods/o9bwxmbv
+```
+
+You may run multiple `wandb agent ...` commands at the same time.
 
