@@ -7,10 +7,12 @@ import time
 from distutils.util import strtobool
 
 import gym
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from celluloid import Camera
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -26,7 +28,7 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
-    parser.add_argument("--total-timesteps", type=int, default=300000,
+    parser.add_argument("--total-timesteps", type=int, default=50000,
         help="total timesteps of the experiments")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
@@ -40,6 +42,8 @@ def parse_args():
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="weather to capture videos of the agent performances (check out `videos` folder)")
+    parser.add_argument("--visualize-timestep-distribution", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="weather to visualize the distribution of timesteps of states")
 
     # Algorithm specific arguments
     parser.add_argument("--asyncvec", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
@@ -62,7 +66,7 @@ def parse_args():
         help="the starting epsilon for exploration")
     parser.add_argument("--end-e", type=float, default=0.05,
         help="the ending epsilon for exploration")
-    parser.add_argument("--exploration-fraction", type=float, default=0.8,
+    parser.add_argument("--exploration-fraction", type=float, default=0.5,
         help="the fraction of `total-timesteps` it takes from start-e to go end-e")
     args = parser.parse_args()
     args.batch_size = int(args.num_envs * args.num_steps)
@@ -71,9 +75,25 @@ def parse_args():
     return args
 
 
+class TimestepStats(gym.Wrapper):
+    def __init__(self, env) -> None:
+        super().__init__(env)
+
+    def step(self, action):
+        obs, reward, done, info = super().step(action)
+        self.t += 1
+        return obs, reward, done, info
+
+    def reset(self, **kwargs):
+        obs = super().reset(**kwargs)
+        self.t = 0
+        return obs
+
+
 def make_env(gym_id, seed, idx, capture_video, run_name):
     def thunk():
         env = gym.make(gym_id)
+        env = TimestepStats(env)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video:
             if idx == 0:
@@ -164,6 +184,7 @@ if __name__ == "__main__":
     actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    timesteps = torch.zeros((args.num_steps, args.num_envs)).to(device)
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
@@ -172,6 +193,10 @@ if __name__ == "__main__":
     next_done = torch.zeros(args.num_envs).to(device)
     num_updates = args.total_timesteps // args.batch_size
     num_gradient_updates = 0
+    # Visualization:
+    if args.visualize_timestep_distribution:
+        fig, ax = plt.subplots()
+        camera = Camera(fig)
 
     for update in range(1, num_updates + 1):
         # ROLLOUTS
@@ -203,6 +228,7 @@ if __name__ == "__main__":
                 torch.Tensor(next_obs).to(device),
                 torch.Tensor(done).to(device),
             )
+            timesteps[step] = torch.Tensor(np.array([env.t for env in envs.envs]))
 
             for item in info:
                 if "episode" in item.keys():
@@ -210,6 +236,16 @@ if __name__ == "__main__":
                     writer.add_scalar("charts/episodic_return", item["episode"]["r"], global_step)
                     writer.add_scalar("charts/episodic_length", item["episode"]["l"], global_step)
                     break
+
+        if args.visualize_timestep_distribution:
+            max_timestep = int(timesteps.max().long())
+            histogram = timesteps.histc(bins=max_timestep, min=0, max=max_timestep)
+            x = range(max_timestep)
+            ax.bar(x, histogram.cpu())
+            ax.set_xlabel("Visited timestep of the obs (higher the better)")
+            ax.set_ylabel("Number of occurrences")
+            ax.text(0.2, 1.01, f"global_step={global_step}, update={update}", transform=ax.transAxes)
+            camera.snap()
 
         # TRAINING
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
@@ -251,6 +287,12 @@ if __name__ == "__main__":
         writer.add_scalar("losses/q_values", old_val.mean().item(), global_step)
         print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+
+    if args.visualize_timestep_distribution:
+        animation = camera.animate()
+        animation.save(f"runs/{run_name}/animation.mp4")
+        if args.track:
+            wandb.log({"video.0": wandb.Video(f"runs/{run_name}/animation.mp4")})
 
     envs.close()
     writer.close()
