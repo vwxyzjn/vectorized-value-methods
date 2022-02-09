@@ -16,6 +16,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from celluloid import Camera
 from torch.utils.tensorboard import SummaryWriter
+from collections import deque
 
 
 def parse_args():
@@ -236,6 +237,7 @@ if __name__ == "__main__":
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
     timesteps = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    avg_returns = deque(maxlen=100)
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
@@ -276,6 +278,8 @@ if __name__ == "__main__":
                     print(f"global_step={global_step}, episodic_return={item['episode']['r']}")
                     writer.add_scalar("charts/episodic_return", item["episode"]["r"], global_step)
                     writer.add_scalar("charts/episodic_length", item["episode"]["l"], global_step)
+                    avg_returns.append(item["episode"]["r"])
+                    writer.add_scalar("charts/avg_episodic_return", np.average(avg_returns), global_step)
                     break
 
         # bootstrap value if not done
@@ -292,14 +296,14 @@ if __name__ == "__main__":
                 returns[t] = rewards[t] + args.gamma * nextnonterminal * next_return
             # advantages = returns - values
 
-        max_timestep = int(timesteps.max().long())
-        histogram = timesteps.histc(bins=max_timestep, min=0, max=max_timestep)
-        x = range(max_timestep)
-        ax.bar(x, histogram.cpu())
-        ax.set_xlabel("Visited timestep of the obs (higher the better)")
-        ax.set_ylabel("Number of occurrences")
-        ax.text(0.2, 1.01, f"global_step={global_step}, update={update}", transform=ax.transAxes)
-        camera.snap()
+        # max_timestep = int(timesteps.max().long())
+        # histogram = timesteps.histc(bins=max_timestep, min=0, max=max_timestep)
+        # x = range(max_timestep)
+        # ax.bar(x, histogram.cpu())
+        # ax.set_xlabel("Visited timestep of the obs (higher the better)")
+        # ax.set_ylabel("Number of occurrences")
+        # ax.text(0.2, 1.01, f"global_step={global_step}, update={update}", transform=ax.transAxes)
+        # camera.snap()
         # TRAINING
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
@@ -368,10 +372,10 @@ if __name__ == "__main__":
         print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
-    animation = camera.animate()
-    animation.save(f"runs/{run_name}/animation.mp4")
-    if args.track:
-        wandb.log({"video.0": wandb.Video(f"runs/{run_name}/animation.mp4")})
+    # animation = camera.animate()
+    # animation.save(f"runs/{run_name}/animation.mp4")
+    # if args.track:
+    #     wandb.log({"video.0": wandb.Video(f"runs/{run_name}/animation.mp4")})
 
     envs.close()
     writer.close()
