@@ -42,6 +42,8 @@ def parse_args():
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="weather to capture videos of the agent performances (check out `videos` folder)")
+    parser.add_argument("--visualize-timestep-distribution", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="weather to visualize the distribution of timesteps of states")
 
     # Algorithm specific arguments
     parser.add_argument("--asyncvec", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
@@ -188,8 +190,9 @@ if __name__ == "__main__":
     num_updates = args.total_timesteps // args.batch_size
     num_gradient_updates = 0
     # Visualization:
-    fig, ax = plt.subplots()
-    camera = Camera(fig)
+    if args.visualize_timestep_distribution:
+        fig, ax = plt.subplots()
+        camera = Camera(fig)
 
     for update in range(1, num_updates + 1):
         # ROLLOUTS
@@ -244,14 +247,15 @@ if __name__ == "__main__":
                 returns[t] = rewards[t] + args.gamma * nextnonterminal * next_return
             # advantages = returns - values
 
-        max_timestep = int(timesteps.max().long())
-        histogram = timesteps.histc(bins=max_timestep, min=0, max=max_timestep)
-        x = range(max_timestep)
-        ax.bar(x, histogram.cpu())
-        ax.set_xlabel("Visited timestep of the obs (higher the better)")
-        ax.set_ylabel("Number of occurrences")
-        ax.text(0.2, 1.01, f"global_step={global_step}, update={update}", transform=ax.transAxes)
-        camera.snap()
+        if args.visualize_timestep_distribution:
+            max_timestep = int(timesteps.max().long())
+            histogram = timesteps.histc(bins=max_timestep, min=0, max=max_timestep)
+            x = range(max_timestep)
+            ax.bar(x, histogram.cpu())
+            ax.set_xlabel("Visited timestep of the obs (higher the better)")
+            ax.set_ylabel("Number of occurrences")
+            ax.text(0.2, 1.01, f"global_step={global_step}, update={update}", transform=ax.transAxes)
+            camera.snap()
 
         # TRAINING
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
@@ -283,10 +287,11 @@ if __name__ == "__main__":
         print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
-    animation = camera.animate()
-    animation.save(f"runs/{run_name}/animation.mp4")
-    if args.track:
-        wandb.log({"video.0": wandb.Video(f"runs/{run_name}/animation.mp4")})
+    if args.visualize_timestep_distribution:
+        animation = camera.animate()
+        animation.save(f"runs/{run_name}/animation.mp4")
+        if args.track:
+            wandb.log({"video.0": wandb.Video(f"runs/{run_name}/animation.mp4")})
 
     envs.close()
     writer.close()
