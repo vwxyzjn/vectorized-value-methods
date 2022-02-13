@@ -265,7 +265,6 @@ if __name__ == "__main__":
         b_dones = dones.reshape((-1,))
         b_returns = returns.reshape(-1)
 
-
         b_inds = np.arange(args.batch_size)
         for epoch in range(args.update_epochs):
             np.random.shuffle(b_inds)
