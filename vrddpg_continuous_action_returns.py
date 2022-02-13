@@ -196,7 +196,7 @@ if __name__ == "__main__":
     max_action = float(envs.single_action_space.high[0])
     actor = Actor(envs).to(device)
     qf1 = QNetwork(envs).to(device)
-    q_optimizer = optim.Adam(list(qf1.parameters()) , lr=args.learning_rate)
+    q_optimizer = optim.Adam(list(qf1.parameters()), lr=args.learning_rate)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
     loss_fn = nn.MSELoss()
 
@@ -238,9 +238,7 @@ if __name__ == "__main__":
             # ALGO LOGIC: action logic
             with torch.no_grad():
                 action = actor.forward(next_obs)
-                clipped_noise = (
-                    (torch.randn_like(action) * epsilon).clamp(-args.noise_clip, args.noise_clip).to(device)
-                )
+                clipped_noise = (torch.randn_like(action) * epsilon).clamp(-args.noise_clip, args.noise_clip).to(device)
                 action = (action + clipped_noise).clamp(-max_action, max_action)
                 """
                 action = (
