@@ -33,7 +33,7 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
-    parser.add_argument("--total-timesteps", type=int, default=1000000,
+    parser.add_argument("--total-timesteps", type=int, default=10000000,
         help="total timesteps of the experiments")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
@@ -53,11 +53,11 @@ def parse_args():
     # Algorithm specific arguments
     parser.add_argument("--asyncvec", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="weather to use the async vectorized environments")
-    parser.add_argument("--num-envs", type=int, default=16,
+    parser.add_argument("--num-envs", type=int, default=32,
         help="the number of parallel game environments")
     parser.add_argument("--num-steps", type=int, default=5,
         help="the number of steps to run in each environment per policy rollout")
-    parser.add_argument("--num-minibatches", type=int, default=2,
+    parser.add_argument("--num-minibatches", type=int, default=1,
         help="the number of mini-batches")
     parser.add_argument("--update-epochs", type=int, default=1,
         help="the K epochs to update the policy")
@@ -71,11 +71,11 @@ def parse_args():
         help="the starting epsilon for exploration")
     parser.add_argument("--end-e", type=float, default=0.1,
         help="the ending epsilon for exploration")
-    parser.add_argument("--exploration-fraction", type=float, default=0.1,
+    parser.add_argument("--exploration-fraction", type=float, default=0.6,
         help="the fraction of `total-timesteps` it takes from start-e to go end-e")
     parser.add_argument("--learning-starts", type=int, default=10000,
         help="timestep to start learning")
-    parser.add_argument("--policy-frequency", type=int, default=48,
+    parser.add_argument("--policy-frequency", type=int, default=40,
         help="the frequency of training policy (delayed)")
     parser.add_argument("--noise-clip", type=float, default=0.5,
         help="noise clip parameter of the Target Policy Smoothing Regularization")
