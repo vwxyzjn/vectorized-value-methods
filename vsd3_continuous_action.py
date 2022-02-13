@@ -281,13 +281,15 @@ if __name__ == "__main__":
 
                     with torch.no_grad():
                         clipped_noise = (
-                            (torch.randn(
-                                (b_actions[mb_inds].shape[0], args.noise_samples, b_actions[mb_inds].shape[1]), 
-                                dtype=b_actions[mb_inds].dtype, 
-                                layout=b_actions[mb_inds].layout, 
-                                device=b_actions[mb_inds].device
-                            ) 
-                            * args.policy_noise)
+                            (
+                                torch.randn(
+                                    (b_actions[mb_inds].shape[0], args.noise_samples, b_actions[mb_inds].shape[1]),
+                                    dtype=b_actions[mb_inds].dtype,
+                                    layout=b_actions[mb_inds].layout,
+                                    device=b_actions[mb_inds].device,
+                                )
+                                * args.policy_noise
+                            )
                             .clamp(-args.noise_clip, args.noise_clip)
                             .to(device)
                         )
