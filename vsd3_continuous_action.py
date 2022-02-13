@@ -220,7 +220,7 @@ if __name__ == "__main__":
                     (torch.randn_like(action) * args.exploration_noise).clamp(-args.noise_clip, args.noise_clip).to(device)
                 )
                 action = (action + clipped_noise).clamp(-max_action, max_action)
-                
+
                 action = action
             actions[step] = action
 
@@ -315,7 +315,6 @@ if __name__ == "__main__":
                         next_q = (sum_e_times_q / sum_e_beta_norm_q).unsqueeze(1)
 
                         target_q = b_rewards[mb_inds].unsqueeze(1) + (1 - b_dones[mb_inds].unsqueeze(1)) * args.gamma * next_q
-
 
                     q = critic.forward(b_obs[mb_inds], b_actions[mb_inds])
 
