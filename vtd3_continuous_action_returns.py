@@ -27,7 +27,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
         help="the name of this experiment")
-    parser.add_argument("--gym-id", type=str, default="HopperBulletEnv-v0",
+    parser.add_argument("--gym-id", type=str, default="HalfCheetah-v2",
         help="the id of the gym environment")
     parser.add_argument("--learning-rate", type=float, default=3e-4,
         help="the learning rate of the optimizer")
@@ -53,25 +53,27 @@ def parse_args():
     # Algorithm specific arguments
     parser.add_argument("--asyncvec", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="weather to use the async vectorized environments")
-    parser.add_argument("--num-envs", type=int, default=8,
+    parser.add_argument("--num-envs", type=int, default=16,
         help="the number of parallel game environments")
-    parser.add_argument("--num-steps", type=int, default=128,
+    parser.add_argument("--num-steps", type=int, default=5,
         help="the number of steps to run in each environment per policy rollout")
     parser.add_argument("--num-minibatches", type=int, default=2,
         help="the number of mini-batches")
-    parser.add_argument("--update-epochs", type=int, default=4,
+    parser.add_argument("--update-epochs", type=int, default=1,
         help="the K epochs to update the policy")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
-    parser.add_argument("--tau", type=float, default=0.005,
-        help="target smoothing coefficient (default: 0.005)")
     parser.add_argument("--max-grad-norm", type=float, default=0.5,
         help="the maximum norm for the gradient clipping")
-    parser.add_argument("--policy-noise", type=float, default=0.2,
-        help="the scale of policy noise")
-    parser.add_argument("--exploration-noise", type=float, default=0.8,
-        help="the scale of exploration noise")
-    parser.add_argument("--learning-starts", type=int, default=25000,
+    # parser.add_argument("--exploration-noise", type=float, default=0.8,
+    #     help="the scale of exploration noise")
+    parser.add_argument("--start-e", type=float, default=0.8,
+        help="the starting epsilon for exploration")
+    parser.add_argument("--end-e", type=float, default=0.1,
+        help="the ending epsilon for exploration")
+    parser.add_argument("--exploration-fraction", type=float, default=0.1,
+        help="the fraction of `total-timesteps` it takes from start-e to go end-e")
+    parser.add_argument("--learning-starts", type=int, default=10000,
         help="timestep to start learning")
     parser.add_argument("--policy-frequency", type=int, default=48,
         help="the frequency of training policy (delayed)")
@@ -107,6 +109,11 @@ def make_env(gym_id, seed, idx, capture_video, run_name):
         if capture_video:
             if idx == 0:
                 env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+        env = gym.wrappers.ClipAction(env)
+        env = gym.wrappers.NormalizeObservation(env)
+        env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
+        env = gym.wrappers.NormalizeReward(env)
+        env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
@@ -144,6 +151,11 @@ class Actor(nn.Module):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         return torch.tanh(self.fc_mu(x))
+
+
+def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
+    slope = (end_e - start_e) / duration
+    return max(slope * t + start_e, end_e)
 
 
 if __name__ == "__main__":
@@ -184,14 +196,7 @@ if __name__ == "__main__":
     max_action = float(envs.single_action_space.high[0])
     actor = Actor(envs).to(device)
     qf1 = QNetwork(envs).to(device)
-    qf2 = QNetwork(envs).to(device)
-    qf1_target = QNetwork(envs).to(device)
-    qf2_target = QNetwork(envs).to(device)
-    target_actor = Actor(envs).to(device)
-    target_actor.load_state_dict(actor.state_dict())
-    qf1_target.load_state_dict(qf1.state_dict())
-    qf2_target.load_state_dict(qf2.state_dict())
-    q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=args.learning_rate)
+    q_optimizer = optim.Adam(list(qf1.parameters()) , lr=args.learning_rate)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
     loss_fn = nn.MSELoss()
 
@@ -218,6 +223,13 @@ if __name__ == "__main__":
 
     for update in range(1, num_updates + 1):
         # ROLLOUTS
+        epsilon = linear_schedule(
+            args.start_e,
+            args.end_e,
+            args.exploration_fraction * args.total_timesteps,
+            global_step,
+        )
+        writer.add_scalar("charts/epsilon", epsilon, global_step)
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
             obs[step] = next_obs
@@ -227,7 +239,7 @@ if __name__ == "__main__":
             with torch.no_grad():
                 action = actor.forward(next_obs)
                 clipped_noise = (
-                    (torch.randn_like(action) * args.exploration_noise).clamp(-args.noise_clip, args.noise_clip).to(device)
+                    (torch.randn_like(action) * epsilon).clamp(-args.noise_clip, args.noise_clip).to(device)
                 )
                 action = (action + clipped_noise).clamp(-max_action, max_action)
                 """
@@ -297,22 +309,16 @@ if __name__ == "__main__":
                 mb_inds = b_inds[start:end]
 
                 qf1_a_values = qf1.forward(b_obs[mb_inds], b_actions[mb_inds]).view(-1)
-                qf2_a_values = qf2.forward(b_obs[mb_inds], b_actions[mb_inds]).view(-1)
                 qf1_loss = loss_fn(qf1_a_values, b_returns[mb_inds])
-                qf2_loss = loss_fn(qf2_a_values, b_returns[mb_inds])
 
                 writer.add_scalar("debug/q1_values", qf1_a_values.mean().item(), global_step)
-                writer.add_scalar("debug/q2_values", qf2_a_values.mean().item(), global_step)
 
                 # optimize the model
                 q_optimizer.zero_grad()
                 qf1_loss.backward()
-                qf2_loss.backward()
-
-                nn.utils.clip_grad_norm_(list(qf1.parameters()) + list(qf2.parameters()), args.max_grad_norm)
+                nn.utils.clip_grad_norm_(list(qf1.parameters()), args.max_grad_norm)
                 q_optimizer.step()
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
-                writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
 
                 if num_gradient_updates % args.policy_frequency == 0 and global_step > args.learning_starts:
                     actor_loss = -qf1.forward(b_obs[mb_inds], actor.forward(b_obs[mb_inds])).mean()
@@ -321,13 +327,7 @@ if __name__ == "__main__":
                     nn.utils.clip_grad_norm_(list(actor.parameters()), args.max_grad_norm)
                     actor_optimizer.step()
 
-                    writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)  # update the target network
-                    for param, target_param in zip(actor.parameters(), target_actor.parameters()):
-                        target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
-                    for param, target_param in zip(qf1.parameters(), qf1_target.parameters()):
-                        target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
-                    for param, target_param in zip(qf2.parameters(), qf2_target.parameters()):
-                        target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
+                    writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
         print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 

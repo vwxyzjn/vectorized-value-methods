@@ -248,14 +248,15 @@ if __name__ == "__main__":
                     writer.add_scalar("charts/episodic_length", item["episode"]["l"], global_step)
                     break
 
-        max_timestep = int(timesteps.max().long())
-        histogram = timesteps.histc(bins=max_timestep, min=0, max=max_timestep)
-        x = range(max_timestep)
-        ax.bar(x, histogram.cpu())
-        ax.set_xlabel("Visited timestep of the obs (higher the better)")
-        ax.set_ylabel("Number of occurrences")
-        ax.text(0.2, 1.01, f"global_step={global_step}, update={update}", transform=ax.transAxes)
-        camera.snap()
+        if args.visualize_timestep_distribution:
+            max_timestep = int(timesteps.max().long())
+            histogram = timesteps.histc(bins=max_timestep, min=0, max=max_timestep)
+            x = range(max_timestep)
+            ax.bar(x, histogram.cpu())
+            ax.set_xlabel("Visited timestep of the obs (higher the better)")
+            ax.set_ylabel("Number of occurrences")
+            ax.text(0.2, 1.01, f"global_step={global_step}, update={update}", transform=ax.transAxes)
+            camera.snap()
 
         # bootstrap value if not done
         with torch.no_grad():
