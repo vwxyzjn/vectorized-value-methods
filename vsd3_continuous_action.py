@@ -213,7 +213,7 @@ if __name__ == "__main__":
                 q2 = qf2.forward(next_obs, action2)
 
                 action = torch.Tensor(
-                    [action1[i].numpy() if q1[i] >= q2[i] else action2[i].numpy() for i in range(len(q1))]
+                    [action1[i].cpu().numpy() if q1[i] >= q2[i] else action2[i].cpu().numpy() for i in range(len(q1))]
                 ).to(device)
 
                 clipped_noise = (
@@ -281,15 +281,15 @@ if __name__ == "__main__":
 
                     with torch.no_grad():
                         clipped_noise = (
-                            (
-                                torch.randn(
-                                    (b_actions[mb_inds].shape[0], args.noise_samples, b_actions[mb_inds].shape[1]),
-                                    dtype=b_actions[mb_inds].dtype,
-                                    layout=b_actions[mb_inds].layout,
-                                    device=b_actions[mb_inds].device,
-                                )
-                                * args.policy_noise
-                            )
+                            (torch.randn(
+                                (b_actions[mb_inds].shape[0], args.noise_samples, b_actions[mb_inds].shape[1]), 
+                                dtype=b_actions[mb_inds].dtype, 
+                                layout=b_actions[mb_inds].layout, 
+                                device=b_actions[mb_inds].device
+                            ) 
+                            * args.policy_noise)
+                            .clamp(-args.noise_clip, args.noise_clip)
+                            .to(device)
                         )
                         next_state_actions = target_actor.forward(b_next_obs[mb_inds])
 
