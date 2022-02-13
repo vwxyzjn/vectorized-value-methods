@@ -290,6 +290,7 @@ if __name__ == "__main__":
                                 )
                                 * args.policy_noise
                             )
+                        )
                         next_state_actions = target_actor.forward(b_next_obs[mb_inds])
 
                         next_state_actions = next_state_actions.unsqueeze(1)
