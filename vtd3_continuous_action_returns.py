@@ -57,7 +57,7 @@ def parse_args():
         help="the number of parallel game environments")
     parser.add_argument("--num-steps", type=int, default=128,
         help="the number of steps to run in each environment per policy rollout")
-    parser.add_argument("--num-minibatches", type=int, default=4,
+    parser.add_argument("--num-minibatches", type=int, default=2,
         help="the number of mini-batches")
     parser.add_argument("--update-epochs", type=int, default=4,
         help="the K epochs to update the policy")
@@ -69,11 +69,11 @@ def parse_args():
         help="the maximum norm for the gradient clipping")
     parser.add_argument("--policy-noise", type=float, default=0.2,
         help="the scale of policy noise")
-    parser.add_argument("--exploration-noise", type=float, default=0.9,
+    parser.add_argument("--exploration-noise", type=float, default=0.8,
         help="the scale of exploration noise")
     parser.add_argument("--learning-starts", type=int, default=25000,
         help="timestep to start learning")
-    parser.add_argument("--policy-frequency", type=int, default=8,
+    parser.add_argument("--policy-frequency", type=int, default=48,
         help="the frequency of training policy (delayed)")
     parser.add_argument("--noise-clip", type=float, default=0.5,
         help="noise clip parameter of the Target Policy Smoothing Regularization")
