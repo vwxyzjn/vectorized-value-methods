@@ -212,8 +212,9 @@ if __name__ == "__main__":
                 q1 = qf1.forward(next_obs, action1)
                 q2 = qf2.forward(next_obs, action2)
 
-                #action = action1 if q1 >= q2 else action2
-                action = torch.Tensor([action1[i].numpy() if q1[i] >= q2[i] else action2[i].numpy() for i in range(len(q1))]).to(device)
+                action = torch.Tensor(
+                    [action1[i].numpy() if q1[i] >= q2[i] else action2[i].numpy() for i in range(len(q1))]
+                ).to(device)
 
                 clipped_noise = (
                     (torch.randn_like(action) * args.exploration_noise).clamp(-args.noise_clip, args.noise_clip).to(device)
@@ -277,23 +278,23 @@ if __name__ == "__main__":
                         debug_value = "debug/q2_values"
                         debug_loss = "losses/qf2_loss"
                         debug_actor = "losses/actor2_loss"
-                    
-                    with torch.no_grad():                        
+
+                    with torch.no_grad():
                         clipped_noise = (
-                            (torch.randn(
-                                (b_actions[mb_inds].shape[0], args.noise_samples, b_actions[mb_inds].shape[1]), 
-                                dtype=b_actions[mb_inds].dtype, layout=b_actions[mb_inds].layout, device=b_actions[mb_inds].device
-                            ) * args.policy_noise)
-                            .clamp(-args.noise_clip, args.noise_clip)
-                            .to(device)
-                        )
+                            (
+                                torch.randn(
+                                    (b_actions[mb_inds].shape[0], args.noise_samples, b_actions[mb_inds].shape[1]),
+                                    dtype=b_actions[mb_inds].dtype,
+                                    layout=b_actions[mb_inds].layout,
+                                    device=b_actions[mb_inds].device,
+                                )
+                                * args.policy_noise
+                            )
                         next_state_actions = target_actor.forward(b_next_obs[mb_inds])
 
                         next_state_actions = next_state_actions.unsqueeze(1)
 
-                        next_state_actions = (next_state_actions + clipped_noise).clamp(
-                            -max_action, max_action
-                        )
+                        next_state_actions = (next_state_actions + clipped_noise).clamp(-max_action, max_action)
 
                         next_states = b_next_obs[mb_inds].unsqueeze(1).repeat((1, args.noise_samples, 1))
 
@@ -305,14 +306,14 @@ if __name__ == "__main__":
                         norm_q = next_q - max_q
                         e_beta_norm_q = torch.exp(args.beta * norm_q)
                         e_times_q = next_q * e_beta_norm_q
-                        
+
                         sum_e_times_q = torch.sum(e_times_q, 1)
                         sum_e_beta_norm_q = torch.sum(e_beta_norm_q, 1)
                         next_q = (sum_e_times_q / sum_e_beta_norm_q).unsqueeze(1)
 
                         target_q = b_rewards[mb_inds].unsqueeze(1) + (1 - b_dones[mb_inds].unsqueeze(1)) * args.gamma * next_q
-                        
-                    
+
+
                     q = critic.forward(b_obs[mb_inds], b_actions[mb_inds])
 
                     q_loss = loss_fn(q, target_q)
