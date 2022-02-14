@@ -65,20 +65,12 @@ def parse_args():
         help="the discount factor gamma")
     parser.add_argument("--max-grad-norm", type=float, default=0.5,
         help="the maximum norm for the gradient clipping")
-    # parser.add_argument("--exploration-noise", type=float, default=0.8,
-    #     help="the scale of exploration noise")
-    parser.add_argument("--start-e", type=float, default=0.8,
-        help="the starting epsilon for exploration")
-    parser.add_argument("--end-e", type=float, default=0.1,
-        help="the ending epsilon for exploration")
-    parser.add_argument("--exploration-fraction", type=float, default=0.6,
-        help="the fraction of `total-timesteps` it takes from start-e to go end-e")
+    parser.add_argument("--exploration-noise", type=float, default=0.2,
+        help="the scale of exploration noise")
     parser.add_argument("--learning-starts", type=int, default=10000,
         help="timestep to start learning")
     parser.add_argument("--policy-frequency", type=int, default=40,
         help="the frequency of training policy (delayed)")
-    parser.add_argument("--noise-clip", type=float, default=0.5,
-        help="noise clip parameter of the Target Policy Smoothing Regularization")
     args = parser.parse_args()
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
@@ -153,11 +145,6 @@ class Actor(nn.Module):
         return torch.tanh(self.fc_mu(x))
 
 
-def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
-    slope = (end_e - start_e) / duration
-    return max(slope * t + start_e, end_e)
-
-
 if __name__ == "__main__":
     args = parse_args()
     run_name = f"{args.gym_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
@@ -199,6 +186,10 @@ if __name__ == "__main__":
     q_optimizer = optim.Adam(list(qf1.parameters()), lr=args.learning_rate)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
     loss_fn = nn.MSELoss()
+    exploration_dist = torch.distributions.Normal(
+        torch.zeros(envs.single_action_space.shape[0]).to(device),
+        torch.zeros(envs.single_action_space.shape[0]).to(device) + args.exploration_noise,
+    )
 
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
@@ -223,13 +214,6 @@ if __name__ == "__main__":
 
     for update in range(1, num_updates + 1):
         # ROLLOUTS
-        epsilon = linear_schedule(
-            args.start_e,
-            args.end_e,
-            args.exploration_fraction * args.total_timesteps,
-            global_step,
-        )
-        writer.add_scalar("charts/epsilon", epsilon, global_step)
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
             obs[step] = next_obs
@@ -237,16 +221,7 @@ if __name__ == "__main__":
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
-                action = actor.forward(next_obs)
-                clipped_noise = (torch.randn_like(action) * epsilon).clamp(-args.noise_clip, args.noise_clip).to(device)
-                action = (action + clipped_noise).clamp(-max_action, max_action)
-                """
-                action = (
-                    action +
-                    torch.normal(0, 1.0 * args.exploration_noise, size=(envs.num_envs, envs.single_action_space.shape[0]), device=device)
-                ).clamp(-max_action, max_action)
-                """
-                action = action
+                action = (actor.forward(next_obs) + exploration_dist.sample([args.num_envs])).clamp(-max_action, max_action)
             actions[step] = action
 
             # TRY NOT TO MODIFY: execute the game and log data.
