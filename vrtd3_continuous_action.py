@@ -265,14 +265,8 @@ if __name__ == "__main__":
 
         # bootstrap value if not done
         with torch.no_grad():
-            clipped_noise = (
-                (torch.randn_like(action) * args.policy_noise)
-                .clamp(-args.noise_clip, args.noise_clip)
-                .to(device)
-            )
-            next_state_actions = (target_actor.forward(next_obs) + clipped_noise).clamp(
-                -max_action, max_action
-            )
+            clipped_noise = (torch.randn_like(action) * args.policy_noise).clamp(-args.noise_clip, args.noise_clip).to(device)
+            next_state_actions = (target_actor.forward(next_obs) + clipped_noise).clamp(-max_action, max_action)
             qf1_next_target = qf1_target.forward(next_obs, next_state_actions)
             qf2_next_target = qf2_target.forward(next_obs, next_state_actions)
             next_value = torch.min(qf1_next_target, qf2_next_target).flatten()
@@ -322,7 +316,7 @@ if __name__ == "__main__":
 
                 # optimize the model
                 q_optimizer.zero_grad()
-                (qf1_loss+qf2_loss).backward()
+                (qf1_loss + qf2_loss).backward()
                 nn.utils.clip_grad_norm_(list(qf1.parameters()) + list(qf2.parameters()), args.max_grad_norm)
                 q_optimizer.step()
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
