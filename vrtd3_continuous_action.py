@@ -55,9 +55,9 @@ def parse_args():
         help="weather to use the async vectorized environments")
     parser.add_argument("--num-envs", type=int, default=32,
         help="the number of parallel game environments")
-    parser.add_argument("--num-steps", type=int, default=5,
+    parser.add_argument("--num-steps", type=int, default=22,
         help="the number of steps to run in each environment per policy rollout")
-    parser.add_argument("--num-minibatches", type=int, default=1,
+    parser.add_argument("--num-minibatches", type=int, default=4,
         help="the number of mini-batches")
     parser.add_argument("--update-epochs", type=int, default=1,
         help="the K epochs to update the policy")
@@ -71,7 +71,7 @@ def parse_args():
         help="the scale of exploration noise")
     parser.add_argument("--learning-starts", type=int, default=10000,
         help="timestep to start learning")
-    parser.add_argument("--policy-frequency", type=int, default=2,
+    parser.add_argument("--policy-frequency", type=int, default=4,
         help="the frequency of training policy (delayed)")
     parser.add_argument("--noise-clip", type=float, default=0.5,
         help="noise clip parameter of the Target Policy Smoothing Regularization")
