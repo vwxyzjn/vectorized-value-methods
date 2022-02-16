@@ -214,7 +214,7 @@ if __name__ == "__main__":
         torch.zeros(envs.single_action_space.shape[0]).to(device),
         torch.zeros(envs.single_action_space.shape[0]).to(device) + args.exploration_noise,
     )
-    cast_tensor = torch.ones((args.num_envs,)+ envs.single_action_space.shape, device=device)
+    cast_tensor = torch.ones((args.num_envs,) + envs.single_action_space.shape, device=device)
 
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
