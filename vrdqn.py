@@ -28,7 +28,7 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
-    parser.add_argument("--total-timesteps", type=int, default=500000,
+    parser.add_argument("--total-timesteps", type=int, default=1000000,
         help="total timesteps of the experiments")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
@@ -58,6 +58,8 @@ def parse_args():
         help="the K epochs to update the policy")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
+    parser.add_argument("--target-network-frequency", type=int, default=1000,
+        help="the timesteps it takes to update the target network")
     parser.add_argument("--max-grad-norm", type=float, default=0.5,
         help="the maximum norm for the gradient clipping")
     parser.add_argument("--start-e", type=float, default=1.0,
@@ -167,6 +169,8 @@ if __name__ == "__main__":
 
     # ALGO LOGIC: initialize agent here:
     q_network = QNetwork(envs).to(device)
+    target_network = QNetwork(envs).to(device)
+    target_network.load_state_dict(q_network.state_dict())
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
     loss_fn = nn.MSELoss()
 
@@ -230,7 +234,7 @@ if __name__ == "__main__":
 
         # bootstrap value if not done
         with torch.no_grad():
-            next_value = q_network.forward(next_obs).max(dim=1)[0]
+            next_value = target_network.forward(next_obs).max(dim=1)[0]
             returns = torch.zeros_like(rewards).to(device)
             for t in reversed(range(args.num_steps)):
                 if t == args.num_steps - 1:
@@ -277,6 +281,10 @@ if __name__ == "__main__":
                 loss.backward()
                 nn.utils.clip_grad_norm_(list(q_network.parameters()), args.max_grad_norm)
                 optimizer.step()
+
+                # update the target network
+                if num_gradient_updates % args.target_network_frequency == 0:
+                    target_network.load_state_dict(q_network.state_dict())
 
         writer.add_scalar("losses/q_values", old_val.mean().item(), global_step)
         print("SPS:", int(global_step / (time.time() - start_time)))
