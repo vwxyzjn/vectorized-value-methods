@@ -7,7 +7,6 @@ from distutils.util import strtobool
 from typing import NamedTuple
 
 import gym
-from matplotlib import pyplot as plt
 import numpy as np
 import pybullet_envs  # noqa
 import torch
@@ -15,6 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from celluloid import Camera
+from matplotlib import pyplot as plt
 from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 
@@ -81,20 +81,21 @@ class ReplayBufferSamples(NamedTuple):
     rewards: torch.Tensor
     timesteps: torch.Tensor
 
+
 # modified from https://github.com/seungeunrho/minimalRL/blob/master/dqn.py#
-class ReplayBuffer():
+class ReplayBuffer:
     def __init__(self, buffer_limit, o, a, device):
         self.buffer = collections.deque(maxlen=buffer_limit)
         self.device = device
-    
+
     def add(self, obs, real_next_obs, actions, rewards, dones, infos, timestep):
         transition = obs[0], real_next_obs[0], actions[0], rewards[0], dones[0], infos[0], timestep[0]
         self.buffer.append(transition)
-    
+
     def sample(self, n):
         mini_batch = random.sample(self.buffer, n)
         s_lst, a_lst, s_prime_lst, done_mask_lst, r_lst, t_lst = [], [], [], [], [], []
-        
+
         for transition in mini_batch:
             s, s_prime, a, r, done_mask, _, timestep = transition
             s_lst.append(s)
@@ -104,11 +105,15 @@ class ReplayBuffer():
             done_mask_lst.append(done_mask)
             t_lst.append(timestep)
 
-        data = torch.Tensor(np.array(s_lst)).to(self.device), torch.Tensor(np.array(a_lst)).to(self.device), \
-               torch.Tensor(np.array(s_prime_lst)).to(self.device),  \
-               torch.Tensor(np.array(done_mask_lst)).to(self.device), torch.Tensor(np.array(r_lst)).to(self.device), \
-               torch.Tensor(np.array(t_lst)).to(self.device)
-        
+        data = (
+            torch.Tensor(np.array(s_lst)).to(self.device),
+            torch.Tensor(np.array(a_lst)).to(self.device),
+            torch.Tensor(np.array(s_prime_lst)).to(self.device),
+            torch.Tensor(np.array(done_mask_lst)).to(self.device),
+            torch.Tensor(np.array(r_lst)).to(self.device),
+            torch.Tensor(np.array(t_lst)).to(self.device),
+        )
+
         return ReplayBufferSamples(*data)
 
 
@@ -219,9 +224,7 @@ if __name__ == "__main__":
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
 
     envs.single_observation_space.dtype = np.float32
-    rb = ReplayBuffer(
-        args.buffer_size, envs.single_observation_space, envs.single_action_space, device=device
-    )
+    rb = ReplayBuffer(args.buffer_size, envs.single_observation_space, envs.single_action_space, device=device)
     loss_fn = nn.MSELoss()
 
     # Visualization:
@@ -278,7 +281,12 @@ if __name__ == "__main__":
                 ax.bar(x, histogram.cpu())
                 ax.set_xlabel("Visited timestep of the obs (higher the better)")
                 ax.set_ylabel("Number of occurrences")
-                ax.text(0.2, 1.01, f"global_step={global_step}, update={global_step - args.learning_starts}", transform=ax.transAxes)
+                ax.text(
+                    0.2,
+                    1.01,
+                    f"global_step={global_step}, update={global_step - args.learning_starts}",
+                    transform=ax.transAxes,
+                )
                 camera.snap()
             with torch.no_grad():
                 clipped_noise = (torch.randn_like(torch.Tensor(actions[0])) * args.policy_noise).clamp(
