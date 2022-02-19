@@ -10,7 +10,7 @@ authors = [
 [tool.poetry.dependencies]
 python = ">=3.7.1,<3.11"
 torch = "^1.10.1"
-gym = "^0.21.0"
+gym = "^0.22.0"
 tensorboard = "^2.7.0"
 stable-baselines3 = "1.1"
 wandb = "^0.12.9"
@@ -19,6 +19,7 @@ ale-py = {version = "^0.7", optional = true}
 AutoROM = {version = "^0.4.2", optional = true, extras = ["accept-rom-license"]}
 free-mujoco-py = {version = "^2.1.6", optional = true}
 mujoco-py = {version = "^2.1.2.14", optional = true}
+envpool = {version = "^0.4.5", optional = true}
 celluloid = "^0.2.0"
 
 [tool.poetry.dev-dependencies]
@@ -34,3 +35,4 @@ atari = ["ale-py", "AutoROM"]
 pybullet = ["pybullet"]
 free-mujoco = ["free-mujoco-py"]
 mujoco-py = ["mujoco-py"]
+envpool = ["envpool"]
