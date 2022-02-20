@@ -1,4 +1,6 @@
-# Reference: https://arxiv.org/pdf/1812.05905.pdf
+# Reference: https://arxiv.org/pdf/1509.02971.pdf
+# https://github.com/seungeunrho/minimalRL/blob/master/ddpg.py
+# https://github.com/openai/spinningup/blob/master/spinup/algos/pytorch/ddpg/ddpg.py
 
 import argparse
 import os
@@ -25,8 +27,10 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
         help="the name of this experiment")
-    parser.add_argument("--gym-id", type=str, default="HopperBulletEnv-v0",
+    parser.add_argument("--gym-id", type=str, default="Hopper-v2",
         help="the id of the gym environment")
+    parser.add_argument("--learning-rate", type=float, default=3e-4,
+        help="the learning rate of the optimizer")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
     parser.add_argument("--total-timesteps", type=int, default=1000000,
@@ -35,7 +39,7 @@ def parse_args():
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
-    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True, 
+    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
     parser.add_argument("--wandb-project-name", type=str, default="vectorized-value-methods",
         help="the wandb's project name")
@@ -49,13 +53,13 @@ def parse_args():
     # Algorithm specific arguments
     parser.add_argument("--asyncvec", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="weather to use the async vectorized environments")
-    parser.add_argument("--num-envs", type=int, default=8,
+    parser.add_argument("--num-envs", type=int, default=32,
         help="the number of parallel game environments")
-    parser.add_argument("--num-steps", type=int, default=128,
+    parser.add_argument("--num-steps", type=int, default=8,
         help="the number of steps to run in each environment per policy rollout")
     parser.add_argument("--num-minibatches", type=int, default=4,
         help="the number of mini-batches")
-    parser.add_argument("--update-epochs", type=int, default=4,
+    parser.add_argument("--update-epochs", type=int, default=1,
         help="the K epochs to update the policy")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
@@ -63,6 +67,12 @@ def parse_args():
         help="target smoothing coefficient (default: 0.005)")
     parser.add_argument("--max-grad-norm", type=float, default=0.5,
         help="the maximum norm for the gradient clipping")
+    parser.add_argument("--policy-noise", type=float, default=0.2,
+        help="the scale of policy noise")
+    parser.add_argument("--exploration-noise", type=float, default=0.2,
+        help="the scale of exploration noise")
+    parser.add_argument("--learning-starts", type=int, default=10000,
+        help="timestep to start learning")
     parser.add_argument("--policy-lr", type=float, default=3e-4,
         help="the learning rate of the policy network optimizer")
     parser.add_argument("--q-lr", type=float, default=1e-3,
@@ -107,6 +117,11 @@ def make_env(gym_id, seed, idx, capture_video, run_name):
         if capture_video:
             if idx == 0:
                 env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+        env = gym.wrappers.ClipAction(env)
+        env = gym.wrappers.NormalizeObservation(env)
+        env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
+        env = gym.wrappers.NormalizeReward(env)
+        env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
@@ -142,12 +157,8 @@ class Actor(nn.Module):
         self.fc_mean = nn.Linear(256, np.prod(env.single_action_space.shape))
         self.fc_logstd = nn.Linear(256, np.prod(env.single_action_space.shape))
         # action rescaling
-        self.action_scale = torch.FloatTensor(
-            np.array([envs.single_action_space.high[0] - envs.single_action_space.low[0]]) / 2.0
-        )
-        self.action_bias = torch.FloatTensor(
-            np.array([envs.single_action_space.high[0] + envs.single_action_space.low[0]]) / 2.0
-        )
+        self.action_scale = torch.FloatTensor((env.single_action_space.high - env.single_action_space.low) / 2.0)
+        self.action_bias = torch.FloatTensor((env.single_action_space.high + env.single_action_space.low) / 2.0)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
@@ -155,7 +166,7 @@ class Actor(nn.Module):
         mean = self.fc_mean(x)
         log_std = self.fc_logstd(x)
         log_std = torch.tanh(log_std)
-        log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)
+        log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)  # From SpinUp / Denis Yarats
 
         return mean, log_std
 
@@ -225,6 +236,7 @@ if __name__ == "__main__":
     q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=args.q_lr)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
 
+    # Automatic entropy tuning
     if args.autotune:
         target_entropy = -torch.prod(torch.Tensor(envs.single_action_space.shape).to(device)).item()
         log_alpha = torch.zeros(1, requires_grad=True, device=device)
@@ -232,6 +244,7 @@ if __name__ == "__main__":
         a_optimizer = optim.Adam([log_alpha], lr=args.q_lr)
     else:
         alpha = args.alpha
+
 
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
@@ -264,7 +277,6 @@ if __name__ == "__main__":
             # ALGO LOGIC: action logic
             with torch.no_grad():
                 action, _, _ = actor.get_action(next_obs)
-
             actions[step] = action
 
             # TRY NOT TO MODIFY: execute the game and log data.
@@ -285,20 +297,6 @@ if __name__ == "__main__":
                     writer.add_scalar("charts/avg_episodic_return", np.average(avg_returns), global_step)
                     break
 
-        # bootstrap value if not done
-        with torch.no_grad():
-            next_value = qf1.forward(next_obs, actor.forward(next_obs)[0]).flatten()
-            returns = torch.zeros_like(rewards).to(device)
-            for t in reversed(range(args.num_steps)):
-                if t == args.num_steps - 1:
-                    nextnonterminal = 1.0 - next_done
-                    next_return = next_value
-                else:
-                    nextnonterminal = 1.0 - dones[t + 1]
-                    next_return = returns[t + 1]
-                returns[t] = rewards[t] + args.gamma * nextnonterminal * next_return
-            # advantages = returns - values
-
         if args.visualize_timestep_distribution:
             max_timestep = int(timesteps.max().long())
             histogram = timesteps.histc(bins=max_timestep, min=0, max=max_timestep)
@@ -309,70 +307,93 @@ if __name__ == "__main__":
             ax.text(0.2, 1.01, f"global_step={global_step}, update={update}", transform=ax.transAxes)
             camera.snap()
 
-        # TRAINING
-        b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
-        b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
-        b_rewards = rewards.reshape((-1,))
-        b_dones = dones.reshape((-1,))
-        b_returns = returns.reshape(-1)
+        if global_step > args.learning_starts:
+            # bootstrap value if not done
+            with torch.no_grad():
+                next_state_actions, next_state_log_pi, _ = actor.get_action(next_obs)
+                qf1_next_target = qf1_target(next_obs, next_state_actions)
+                qf2_next_target = qf2_target(next_obs, next_state_actions)
+                next_value = (torch.min(qf1_next_target, qf2_next_target) - alpha * next_state_log_pi).view(-1)
+                returns = torch.zeros_like(rewards).to(device)
+                for t in reversed(range(args.num_steps)):
+                    if t == args.num_steps - 1:
+                        nextnonterminal = 1.0 - next_done
+                        next_return = next_value
+                    else:
+                        nextnonterminal = 1.0 - dones[t + 1]
+                        next_return = returns[t + 1]
+                    returns[t] = rewards[t] + args.gamma * nextnonterminal * next_return
+                # advantages = returns - values
 
-        b_inds = np.arange(args.batch_size)
-        for epoch in range(args.update_epochs):
-            np.random.shuffle(b_inds)
-            for start in range(0, args.batch_size, args.minibatch_size):
-                num_gradient_updates += 1
-                end = start + args.minibatch_size
-                mb_inds = b_inds[start:end]
+            # TRAINING
+            b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
+            b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
+            b_rewards = rewards.reshape((-1,))
+            b_dones = dones.reshape((-1,))
+            b_returns = returns.reshape(-1)
 
-                qf1_a_values = qf1(b_obs[mb_inds], b_actions[mb_inds]).view(-1)
-                qf2_a_values = qf2(b_obs[mb_inds], b_actions[mb_inds]).view(-1)
-                qf1_loss = F.mse_loss(qf1_a_values, b_returns[mb_inds])
-                qf2_loss = F.mse_loss(qf2_a_values, b_returns[mb_inds])
-                qf_loss = (qf1_loss + qf2_loss) / 2
+            b_inds = np.arange(args.batch_size)
+            for epoch in range(args.update_epochs):
+                np.random.shuffle(b_inds)
+                for start in range(0, args.batch_size, args.minibatch_size):
+                    num_gradient_updates += 1
+                    end = start + args.minibatch_size
+                    mb_inds = b_inds[start:end]
 
-                writer.add_scalar("debug/q1_values", qf1_a_values.mean().item(), global_step)
-                writer.add_scalar("debug/q2_values", qf2_a_values.mean().item(), global_step)
+                    qf1_a_values = qf1.forward(b_obs[mb_inds], b_actions[mb_inds]).view(-1)
+                    qf2_a_values = qf2.forward(b_obs[mb_inds], b_actions[mb_inds]).view(-1)
+                    qf1_loss = F.mse_loss(qf1_a_values, b_returns[mb_inds])
+                    qf2_loss = F.mse_loss(qf2_a_values, b_returns[mb_inds])
+                    qf_loss = (qf1_loss + qf2_loss) / 2
 
-                # optimize the model
-                q_optimizer.zero_grad()
-                qf_loss.backward()
-                nn.utils.clip_grad_norm_(list(qf1.parameters()) + list(qf2.parameters()), args.max_grad_norm)
-                q_optimizer.step()
+                    # optimize the model
+                    q_optimizer.zero_grad()
+                    qf_loss.backward()
+                    nn.utils.clip_grad_norm_(list(qf1.parameters()) + list(qf2.parameters()), args.max_grad_norm)
+                    q_optimizer.step()
 
-                writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
-                writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
+                    if num_gradient_updates % args.policy_frequency == 0:  # TD 3 Delayed update support
+                        for _ in range(
+                            args.policy_frequency
+                        ):  # compensate for the delay by doing 'actor_update_interval' instead of 1
+                            pi, log_pi, _ = actor.get_action(b_obs[mb_inds])
+                            qf1_pi = qf1(b_obs[mb_inds], pi)
+                            qf2_pi = qf2(b_obs[mb_inds], pi)
+                            min_qf_pi = torch.min(qf1_pi, qf2_pi).view(-1)
+                            actor_loss = ((alpha * log_pi) - min_qf_pi).mean()
 
-                if num_gradient_updates % args.policy_frequency == 0:
-                    for _ in range(args.policy_frequency):
-                        pi, log_pi, _ = actor.get_action(b_obs[mb_inds])
-                        qf1_pi = qf1(b_obs[mb_inds], pi)
-                        qf2_pi = qf2(b_obs[mb_inds], pi)
-                        min_qf_pi = torch.min(qf1_pi, qf2_pi).view(-1)
-                        actor_loss = ((alpha * log_pi) - min_qf_pi).mean()
+                            actor_optimizer.zero_grad()
+                            actor_loss.backward()
+                            nn.utils.clip_grad_norm_(list(actor.parameters()), args.max_grad_norm)
+                            actor_optimizer.step()
+                            writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
 
-                        actor_optimizer.zero_grad()
-                        actor_loss.backward()
-                        nn.utils.clip_grad_norm_(list(actor.parameters()), args.max_grad_norm)
-                        actor_optimizer.step()
+                            if args.autotune:
+                                with torch.no_grad():
+                                    _, log_pi, _ = actor.get_action(b_obs[mb_inds])
+                                alpha_loss = (-log_alpha * (log_pi + target_entropy)).mean()
 
-                        if args.autotune:
-                            with torch.no_grad():
-                                _, log_pi, _ = actor.get_action(b_obs[mb_inds])
-                            alpha_loss = (-log_alpha * (log_pi + target_entropy)).mean()
+                                a_optimizer.zero_grad()
+                                alpha_loss.backward()
+                                a_optimizer.step()
+                                alpha = log_alpha.exp().item()
+                                writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
 
-                            a_optimizer.zero_grad()
-                            alpha_loss.backward()
-                            a_optimizer.step()
-                            alpha = log_alpha.exp().item()
+                    # update the target networks
+                    if num_gradient_updates % args.target_network_frequency == 0:
+                        for param, target_param in zip(qf1.parameters(), qf1_target.parameters()):
+                            target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
+                        for param, target_param in zip(qf2.parameters(), qf2_target.parameters()):
+                            target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
 
-                        writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
+            writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
+            writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
+            writer.add_scalar("losses/qf_loss", qf_loss.item(), global_step)
+            writer.add_scalar("debug/q1_values", qf1_a_values.mean().item(), global_step)
+            writer.add_scalar("debug/q2_values", qf2_a_values.mean().item(), global_step)
+            writer.add_scalar("losses/alpha", alpha, global_step)
 
-            # update the target networks
-            if global_step % args.target_network_frequency == 0:
-                for param, target_param in zip(qf1.parameters(), qf1_target.parameters()):
-                    target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
-                for param, target_param in zip(qf2.parameters(), qf2_target.parameters()):
-                    target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
+
 
         print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
