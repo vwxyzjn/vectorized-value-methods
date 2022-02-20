@@ -245,7 +245,6 @@ if __name__ == "__main__":
     else:
         alpha = args.alpha
 
-
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
     actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
@@ -392,8 +391,6 @@ if __name__ == "__main__":
             writer.add_scalar("debug/q1_values", qf1_a_values.mean().item(), global_step)
             writer.add_scalar("debug/q2_values", qf2_a_values.mean().item(), global_step)
             writer.add_scalar("losses/alpha", alpha, global_step)
-
-
 
         print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
