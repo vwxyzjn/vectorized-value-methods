@@ -54,8 +54,12 @@ def parse_args():
         help="the number of mini-batches")
     parser.add_argument("--update-epochs", type=int, default=1,
         help="the K epochs to update the policy")
+    parser.add_argument("--gae", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+        help="Use GAE for advantage computation")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
+    parser.add_argument("--gae-lambda", type=float, default=0.95,
+        help="the lambda for the general advantage estimation")
     parser.add_argument("--target-network-frequency", type=int, default=1000,
         help="the timesteps it takes to update the target network")
     parser.add_argument("--max-grad-norm", type=float, default=0.5,
@@ -200,6 +204,7 @@ if __name__ == "__main__":
     actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    values = torch.zeros((args.num_steps, args.num_envs)).to(device)
     avg_returns = deque(maxlen=300)
 
     # TRY NOT TO MODIFY: start the game
@@ -227,7 +232,8 @@ if __name__ == "__main__":
             # ALGO LOGIC: action logic
             with torch.no_grad():
                 logits = q_network.forward(next_obs)
-                action = torch.argmax(logits, dim=1)
+                value, action = logits.max(dim=1)
+                values[step] = value
                 random_action = torch.randint(0, envs.single_action_space.n, (envs.num_envs,), device=device)
                 random_action_flag = torch.rand(envs.num_envs, device=device) > epsilon
                 action = torch.where(random_action_flag, action, random_action)
@@ -252,16 +258,30 @@ if __name__ == "__main__":
         # bootstrap value if not done
         with torch.no_grad():
             next_value = target_network.forward(next_obs).max(dim=1)[0]
-            returns = torch.zeros_like(rewards).to(device)
-            for t in reversed(range(args.num_steps)):
-                if t == args.num_steps - 1:
-                    nextnonterminal = 1.0 - next_done
-                    next_return = next_value
-                else:
-                    nextnonterminal = 1.0 - dones[t + 1]
-                    next_return = returns[t + 1]
-                returns[t] = rewards[t] + args.gamma * nextnonterminal * next_return
-            # advantages = returns - values
+            if args.gae:
+                advantages = torch.zeros_like(rewards).to(device)
+                lastgaelam = 0
+                for t in reversed(range(args.num_steps)):
+                    if t == args.num_steps - 1:
+                        nextnonterminal = 1.0 - next_done
+                        nextvalues = next_value
+                    else:
+                        nextnonterminal = 1.0 - dones[t + 1]
+                        nextvalues = values[t + 1]
+                    delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
+                    advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
+                returns = advantages + values
+            else:
+                returns = torch.zeros_like(rewards).to(device)
+                for t in reversed(range(args.num_steps)):
+                    if t == args.num_steps - 1:
+                        nextnonterminal = 1.0 - next_done
+                        next_return = next_value
+                    else:
+                        nextnonterminal = 1.0 - dones[t + 1]
+                        next_return = returns[t + 1]
+                    returns[t] = rewards[t] + args.gamma * nextnonterminal * next_return
+                advantages = returns - values
 
         # TRAINING
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
